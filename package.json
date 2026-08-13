@@ -1,0 +1,28 @@
+{
+  "name": "saaei-requests-platform",
+  "version": "1.0.0",
+  "description": "منصة الطلبات — ربط طلبات عملاء ساعي بالعقارات المناسبة (Node.js + Express + MongoDB)",
+  "type": "module",
+  "main": "server.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "seed": "node scripts/seed.js",
+    "sync-requests": "node scripts/sync-requests.js",
+    "import-properties": "node scripts/import-properties.js",
+    "verify": "node scripts/verify-requests.js",
+    "check": "node --check server.js"
+  },
+  "dependencies": {
+    "compression": "^1.7.4",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.6.0"
+  }
+}
