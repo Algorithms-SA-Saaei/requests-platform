@@ -2,7 +2,6 @@
 import { createApp } from './src/app.js';
 import { env, assertProductionConfig } from './src/config/environment.js';
 import { connectDatabase, disconnectDatabase } from './src/config/database.js';
-import { initFirebase } from './src/services/firebase.service.js';
 import { logger } from './src/utils/logger.js';
 
 const missing = assertProductionConfig();
@@ -12,7 +11,6 @@ if (missing.length) {
 }
 
 await connectDatabase();
-initFirebase(); // غياب إعداد Firebase لا يمنع الإقلاع — تُعطَّل الإشعارات فقط
 
 const app = createApp();
 const server = app.listen(env.port, () => logger.info('server-started', { port: env.port, env: env.nodeEnv }));
