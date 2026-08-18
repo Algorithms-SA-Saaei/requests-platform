@@ -47,6 +47,15 @@ node scripts/import-properties.js data.json --source market   # تعبئة مخ�
 
 فور تعبئة `Property` من أي مصدر، تعمل المطابقة والمسارات فورًا بلا تغيير.
 
+## واجهة الويب (Frontend)
+صفحات HTML مُخدَّمة من الخادم بهوية ساعي (بلا إطار خارجي — تعمل مباشرة):
+| المسار | الوصف |
+|---|---|
+| `GET /login` · `POST /login` · `GET /logout` | صفحة الدخول (اسم مستخدم + كلمة مرور) |
+| `GET /` | لوحة الطلبات: تبويبات (الكل/غير مطابَقة/مطابَقة/غير محدَّدة) + قائمة + ترقيم + زر مزامنة (admin/manager) |
+| `GET /r/:id` | تفاصيل الطلب + بطاقات العقارات المناسبة بنسبة تطابق |
+الدخول ببيانات `npm run seed` (admin/manager/agent). واجهة البيانات `/api/*` تبقى JSON للتكاملات.
+
 ## البنية
 ```
 server.js · src/app.js
@@ -54,7 +63,7 @@ src/config/{environment,database}.js
 src/middleware/{auth,error,rateLimit,requestId}.middleware.js
 src/models/{User,AuditLog,ClientRequest,Property,AppState}.js
 src/services/{saaeiToken,saaeiRequests,matching}.service.js
-src/controllers/{auth,requests}.controller.js · src/routes/index.js
+src/controllers/{auth,requests,web}.controller.js · src/routes/{index,web}.js
 src/utils/{errors,logger,response}.js
 scripts/{seed,sync-requests,import-properties,verify-requests}.js
 deploy/  (Nginx · PM2 · إعداد VPS · نسخ احتياطي)

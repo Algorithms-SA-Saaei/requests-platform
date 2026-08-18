@@ -28,3 +28,24 @@ export const requireRole = (...roles) => (req, _res, next) =>
 
 export const signToken = (user) =>
   jwt.sign({ sub: String(user.id), role: user.role, name: user.name }, env.jwtSecret, { algorithm: 'HS256', expiresIn: env.jwtTtl });
+
+/** حارس للصفحات (HTML): يحوّل لصفحة الدخول بدل إرجاع JSON عند غياب الجلسة */
+export function requireAuthWeb(req, res, next) {
+  const token = readToken(req);
+  try {
+    const payload = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] });
+    req.user = { id: payload.sub, role: payload.role, name: payload.name };
+    return next();
+  } catch {
+    return res.redirect('/login');
+  }
+}
+/** يقرأ الجلسة إن وُجدت دون إلزام (لتوجيه الجذر) */
+export function optionalAuthWeb(req, _res, next) {
+  const token = readToken(req);
+  try {
+    const p = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] });
+    req.user = { id: p.sub, role: p.role, name: p.name };
+  } catch { req.user = null; }
+  return next();
+}

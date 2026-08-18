@@ -8,6 +8,7 @@ import cookieParser from 'cookie-parser';
 import { env } from './config/environment.js';
 import { isDbConnected } from './config/database.js';
 import apiRoutes from './routes/index.js';
+import webRoutes from './routes/web.js';
 import { requestId, accessLog } from './middleware/requestId.middleware.js';
 import { generalLimiter } from './middleware/rateLimit.middleware.js';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware.js';
@@ -19,7 +20,19 @@ export function createApp() {
   app.set('trust proxy', env.trustProxyHops);
   app.disable('x-powered-by');
 
-  app.use(helmet({ crossOriginEmbedderPolicy: false })); // ترويسات أمنية (§46)
+  app.use(helmet({
+    crossOriginEmbedderPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        imgSrc: ["'self'", "data:", "https://saaei.co", "https://images.bayut.sa", "https://images.aqar.fm"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        formAction: ["'self'"],
+      },
+    },
+  })); // ترويسات أمنية + CSP يسمح بموارد الواجهة (§46)
   app.use(cors({
     origin: (origin, cb) => (!origin || env.corsOrigins.includes(origin) ? cb(null, true) : cb(new Error('CORS'))),
     credentials: true,
@@ -38,7 +51,8 @@ export function createApp() {
     res.status(db ? 200 : 503).json({ status: db ? 'ready' : 'degraded', database: db ? 'up' : 'down', uptimeSec: Math.round(process.uptime()) });
   });
 
-  app.use('/api', generalLimiter, apiRoutes);
+  app.use('/', webRoutes);            // واجهة الويب (HTML)
+  app.use('/api', generalLimiter, apiRoutes); // واجهة البيانات (JSON)
 
   app.use(notFoundHandler);
   app.use(errorHandler);
