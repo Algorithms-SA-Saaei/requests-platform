@@ -9,7 +9,7 @@ RUN apk add --no-cache tzdata \
  && npm install -g pm2@5 \
  && npm cache clean --force
 
-ENV NODE_ENV=development \
+ENV NODE_ENV=production \
     PORT=3000 \
     TZ=Asia/Riyadh \
     PM2_HOME=/home/node/.pm2 \
