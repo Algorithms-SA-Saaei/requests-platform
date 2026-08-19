@@ -28,6 +28,13 @@ export const env = {
   rateWindowMs: num(process.env.RATE_WINDOW_MS, 60000),
   rateMax: num(process.env.RATE_MAX, 120),
   rateMaxWrite: num(process.env.RATE_MAX_WRITE, 20),
+
+  // إعداد Firebase (اختياري — الإشعارات معطَّلة إن غاب)
+  firebase: {
+    projectId: process.env.FIREBASE_PROJECT_ID || '',
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
+    privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+  },
 };
 
 // أسرار إلزامية في الإنتاج — يتوقف التشغيل بدلًا من العمل بإعداد ناقص
