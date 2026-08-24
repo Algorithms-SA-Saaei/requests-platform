@@ -17,5 +17,7 @@ router.post('/auth/logout', requireAuth, asyncHandler(auth.logout));
 router.get('/requests', requireAuth, asyncHandler(requests.list));
 router.get('/requests/:id/matches', requireAuth, asyncHandler(requests.matches));
 router.post('/requests/sync', requireAuth, requireRole('admin', 'manager'), writeLimiter, asyncHandler(requests.sync));
+router.post('/requests/crawl', requireAuth, requireRole('admin', 'manager'), writeLimiter, asyncHandler(requests.crawl));
+router.get('/inventory', requireAuth, asyncHandler(requests.inventory));
 
 export default router;

@@ -14,6 +14,8 @@ const propertySchema = new mongoose.Schema(
     area: { type: Number, default: null },
     price: { type: Number, default: null },
     pricePerM: { type: Number, default: null },
+    lat: { type: Number, default: null },
+    lng: { type: Number, default: null },
     projectId: { type: String, default: null },
     projectName: { type: String, default: null },
     url: { type: String, default: null },

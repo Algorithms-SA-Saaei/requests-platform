@@ -14,7 +14,8 @@
     "sync-requests": "node scripts/sync-requests.js",
     "import-properties": "node scripts/import-properties.js",
     "verify": "node scripts/verify-requests.js",
-    "check": "node --check server.js"
+    "check": "node --check server.js",
+    "crawl": "node scripts/crawl-market.js"
   },
   "dependencies": {
     "compression": "^1.7.4",

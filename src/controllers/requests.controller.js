@@ -3,6 +3,8 @@
 import { ClientRequest } from '../models/ClientRequest.js';
 import { syncRequests, requestCounts, requestSummary } from '../services/saaeiRequests.service.js';
 import { matchesForRequest } from '../services/matching.service.js';
+import { crawlMarket } from '../services/crawl.service.js';
+import { Property } from '../models/Property.js';
 import { tokenStatus } from '../services/saaeiToken.service.js';
 import { ok, created } from '../utils/response.js';
 
@@ -54,4 +56,19 @@ export const matches = async (req, res) => {
 export const sync = async (_req, res) => {
   const result = await syncRequests({ force: true });
   return created(res, result);
+};
+
+// POST /api/requests/crawl — سحب السوق (بيوت+عقار) لتعبئة مخزون المطابقة (admin/manager)
+export const crawl = async (req, res) => {
+  const sources = Array.isArray(req.body?.sources) ? req.body.sources : ['bayut', 'aqar'];
+  const result = await crawlMarket({ sources });
+  return created(res, result);
+};
+// GET /api/inventory — حالة مخزون العقارات
+export const inventory = async (_req, res) => {
+  const [total, bySrc] = await Promise.all([
+    Property.countDocuments({ active: true }),
+    Property.aggregate([{ $match: { active: true } }, { $group: { _id: '$source', n: { $sum: 1 } } }]),
+  ]);
+  return ok(res, { total, bySource: bySrc.map((x) => ({ source: x._id, count: x.n })) });
 };

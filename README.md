@@ -56,6 +56,17 @@ node scripts/import-properties.js data.json --source market   # تعبئة مخ�
 | `GET /r/:id` | تفاصيل الطلب + بطاقات العقارات المناسبة بنسبة تطابق |
 الدخول ببيانات `npm run seed` (admin/manager/agent). واجهة البيانات `/api/*` تبقى JSON للتكاملات.
 
+## سحب السوق (تعبئة مخزون المطابقة)
+سحّابات Node نقية (بلا متصفح) تملأ مجموعة `Property` التي تعمل عليها المطابقة:
+- **بيوت** (Algolia API) — شامل، تقسيم سعري لتجاوز حد 1000.
+- **عقار** (RSC) — صفحة أولى لكل حي×تصنيف.
+```bash
+node scripts/crawl-market.js                 # بيوت + عقار → Property
+node scripts/crawl-market.js --sources bayut # مصدر محدد
+```
+جدولة: `0 4 * * * node scripts/crawl-market.js`. مسار إداري: `POST /api/requests/crawl` · حالة المخزون: `GET /api/inventory`.
+الملفات: `src/services/crawl.service.js` + `src/services/crawlers/{bayut,aqar}.crawler.js`.
+
 ## البنية
 ```
 server.js · src/app.js
