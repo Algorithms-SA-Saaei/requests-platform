@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import * as auth from '../controllers/auth.controller.js';
 import * as requests from '../controllers/requests.controller.js';
+import * as studies from '../controllers/study.controller.js';
 import { asyncHandler } from '../middleware/error.middleware.js';
 import { writeLimiter } from '../middleware/rateLimit.middleware.js';
 import { requireAuth, requireRole } from '../middleware/auth.middleware.js';
@@ -19,5 +20,11 @@ router.get('/requests/:id/matches', requireAuth, asyncHandler(requests.matches))
 router.post('/requests/sync', requireAuth, requireRole('admin', 'manager'), writeLimiter, asyncHandler(requests.sync));
 router.post('/requests/crawl', requireAuth, requireRole('admin', 'manager'), writeLimiter, asyncHandler(requests.crawl));
 router.get('/inventory', requireAuth, asyncHandler(requests.inventory));
+
+// --- دراسات المشاريع ---
+router.get('/studies', requireAuth, asyncHandler(studies.list));
+router.post('/studies', requireAuth, writeLimiter, asyncHandler(studies.create));
+router.get('/studies/:id', requireAuth, asyncHandler(studies.analyze));
+router.delete('/studies/:id', requireAuth, requireRole('admin', 'manager'), asyncHandler(studies.remove));
 
 export default router;

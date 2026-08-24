@@ -67,6 +67,14 @@ node scripts/crawl-market.js --sources bayut # مصدر محدد
 جدولة: `0 4 * * * node scripts/crawl-market.js`. مسار إداري: `POST /api/requests/crawl` · حالة المخزون: `GET /api/inventory`.
 الملفات: `src/services/crawl.service.js` + `src/services/crawlers/{bayut,aqar}.crawler.js`.
 
+## دراسات المشاريع
+المطوّر يُدخل وحدات مشروعه → مقارنة بوسيط السوق من مخزون `Property` (سعر المتر على الإجمالي بناء+خاص).
+| المسار | الوصف |
+|---|---|
+| `POST /api/studies` | إنشاء دراسة (name, district, units[]) |
+| `GET /api/studies` · `GET /api/studies/:id` | القائمة · التحليل الكامل |
+`src/models/Study.js` + `src/services/study.service.js`.
+
 ## البنية
 ```
 server.js · src/app.js
