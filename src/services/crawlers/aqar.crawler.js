@@ -70,24 +70,56 @@ function normalize(o, target) {
   };
 }
 
-async function fetchPage(slug, district) {
-  const url = `${BASE}/${encodeURIComponent(slug)}/${encodeURIComponent(district)}`;
+async function fetchPage(slug, district, page = 1) {
+  const pageParam = page > 1 ? `/${page}` : '';
+  const url = `${BASE}/${encodeURIComponent(slug)}/${encodeURIComponent(district)}${pageParam}`;
   const res = await fetch(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'ar' }, redirect: 'follow' });
   if (!res.ok) return [];
   return parseListings(await res.text());
 }
 
-/** يسحب عقار لمدينة + أحياء × تصنيفات → عقارات مطبَّعة (Property). صفحة أولى لكل هدف. */
+/** يسحب عقار لمدينة + أحياء × تصنيفات عبر جميع الصفحات المتوفرة → عقارات مطبَّعة (Property) */
 export async function crawlAqar({ districts = RIYADH_DISTRICTS, categories = CATEGORIES } = {}) {
   const all = [];
+  const seenIds = new Set();
+
   for (const d of districts) {
     for (const cat of categories) {
+      let page = 1;
+      let hasMore = true;
+      let catCount = 0;
+
       try {
-        const objs = await fetchPage(cat.slug, d);
-        const rows = objs.map((o) => normalize(o, { category: cat.category, district: d }));
-        all.push(...rows);
-        logger.info('aqar-target', { district: d, category: cat.category, count: rows.length });
-      } catch (e) { logger.warn('aqar-target-fail', { district: d, category: cat.category, error: e?.message }); }
+        while (hasMore) {
+          const objs = await fetchPage(cat.slug, d, page);
+          
+          if (!objs || objs.length === 0) {
+            hasMore = false;
+            break;
+          }
+
+          let newItemsCount = 0;
+          for (const o of objs) {
+            if (!seenIds.has(o.id)) {
+              seenIds.add(o.id);
+              all.push(normalize(o, { category: cat.category, district: d }));
+              newItemsCount++;
+            }
+          }
+
+          catCount += newItemsCount;
+
+          // إذا لم تُرجع الصفحة أي عناصر جديدة مضافة (بسبب الوصول لصفحة مكررة أو نفاذ الإعلانات)، نتوقف
+          if (newItemsCount === 0 || objs.length < 5) {
+            hasMore = false;
+          } else {
+            page++;
+          }
+        }
+        logger.info('aqar-target', { district: d, category: cat.category, count: catCount, pages: page });
+      } catch (e) {
+        logger.warn('aqar-target-fail', { district: d, category: cat.category, error: e?.message });
+      }
     }
   }
   return all;

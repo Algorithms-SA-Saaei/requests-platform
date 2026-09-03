@@ -140,7 +140,35 @@ export async function dashboard(req, res) {
     ${tabs ? `<div class="tabs">${tabs}</div>` : ''}
     <div class="bar">
       <div><b style="font-size:16px;color:#23305a">طلبات العملاء</b> <span class="m">${ts.set && ts.daysLeft != null ? '· التوكن صالح ' + ts.daysLeft + ' يوم' : ''}</span></div>
-      ${isAdmin ? '<form method="POST" action="/sync"><button class="btn">↻ مزامنة الآن</button></form>' : ''}
+      ${isAdmin ? `
+        <button class="btn" id="syncBtn" onclick="runSync(this)">↻ مزامنة الآن</button>
+        <script>
+          async function runSync(btn) {
+            if (!btn || btn.disabled) return;
+            btn.disabled = true;
+            btn.innerHTML = '⏳ جارٍ المزامنة والتحديث...';
+            btn.style.opacity = '0.7';
+            try {
+              const res = await fetch('/sync', { method: 'POST', headers: { 'Accept': 'application/json' } });
+              const j = await res.json().catch(function() { return { ok: true }; });
+              if (j.ok !== false) {
+                btn.innerHTML = '✓ تمت المزامنة بنجاح!';
+                setTimeout(function() { window.location.reload(); }, 500);
+              } else {
+                alert('فشلت المزامنة: ' + (j.reason || j.error || 'خطأ في الاتصال'));
+                btn.disabled = false;
+                btn.innerHTML = '↻ مزامنة الآن';
+                btn.style.opacity = '1';
+              }
+            } catch (e) {
+              alert('حدث خطأ أثناء المزامنة: ' + e.message);
+              btn.disabled = false;
+              btn.innerHTML = '↻ مزامنة الآن';
+              btn.style.opacity = '1';
+            }
+          }
+        </script>
+      ` : ''}
     </div>
     <table><thead><tr><th>العميل</th><th>الطلب</th><th>الحالة</th><th>التاريخ</th><th>المطابقة</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="5" class="m" style="text-align:center;padding:26px">لا طلبات — شغّل المزامنة.</td></tr>'}</tbody></table>
@@ -177,7 +205,14 @@ export async function requestDetailPage(req, res) {
   res.send(shell('طلب: ' + (r.clientName || r.saaeiId), body, req.user));
 }
 
-export async function doSync(_req, res) { await syncRequests({ force: true }); res.redirect('/'); }
+export async function doSync(req, res) {
+  const result = await syncRequests({ force: true });
+  if (req.headers.accept?.includes('application/json')) {
+    return res.json({ ok: true, result });
+  }
+  const referer = req.headers.referer || '/';
+  res.redirect(referer);
+}
 
 // ---------- دراسة السوق ----------
 export async function marketPage(req, res) {
