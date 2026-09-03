@@ -16,6 +16,7 @@ const propertySchema = new mongoose.Schema(
     pricePerM: { type: Number, default: null },
     lat: { type: Number, default: null },
     lng: { type: Number, default: null },
+    saleType: { type: String, default: null, index: true }, // ready / offplan
     projectId: { type: String, default: null },
     projectName: { type: String, default: null },
     url: { type: String, default: null },

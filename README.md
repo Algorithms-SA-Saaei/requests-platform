@@ -84,6 +84,12 @@ node scripts/crawl-market.js --sources bayut # مصدر محدد
 | `GET /api/market/overview` · `GET /api/market/districts` | نظرة عامة · قائمة الأحياء |
 `src/services/market.service.js`.
 
+## تفريعات دراسة السوق
+- **مقارنة الأحياء** `/compare` · `GET /api/market/compare` — ترتيب الأحياء بوسيط سعر المتر.
+- **تسعير وحدة** `/pricing` · `GET /api/market/price` — تقدير سعر من وسيط السوق × المساحة.
+- **جاهز/خارطة** `/sale-split` · `GET /api/market/sale-split` — وسيط الجاهز مقابل الخارطة.
+- **فجوات الطلب** `/demands` · `GET /api/market/demand-gaps` — طلب العملاء مقابل المعروض.
+
 ## البنية
 ```
 server.js · src/app.js

@@ -65,6 +65,7 @@ function normalize(o, target) {
     lat: o.location?.lat ?? null,
     lng: o.location?.lng ?? null,
     url: o.path ? BASE + '/' + String(o.path).replace(/^\//, '') : null,
+    saleType: /على الخارطة|الخريطة|تحت الإنشاء|وافي/.test(o.content || o.title || '') ? 'offplan' : /جاهز|استلام فوري/.test(o.content || o.title || '') ? 'ready' : null,
     active: true,
   };
 }

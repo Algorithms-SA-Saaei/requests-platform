@@ -1,5 +1,6 @@
 // دراسة السوق — API: تقرير حي، نظرة عامة، قائمة الأحياء.
-import { marketReport, marketOverview, districtsWithData } from '../services/market.service.js';
+import { marketReport, marketOverview, districtsWithData, compareDistricts, priceUnit, saleSplit } from '../services/market.service.js';
+import { demandGaps } from '../services/demand.service.js';
 import { ok } from '../utils/response.js';
 
 export const report = async (req, res) => {
@@ -8,3 +9,7 @@ export const report = async (req, res) => {
 };
 export const overview = async (_req, res) => ok(res, await marketOverview());
 export const districts = async (req, res) => ok(res, await districtsWithData(req.query.category || null));
+export const compare = async (req, res) => ok(res, await compareDistricts(req.query.category || 'شقة'));
+export const price = async (req, res) => ok(res, await priceUnit(req.query.district || null, req.query.category || 'شقة', req.query.area));
+export const split = async (req, res) => ok(res, await saleSplit(req.query.district || null, req.query.category || 'شقة'));
+export const gaps = async (_req, res) => ok(res, await demandGaps());

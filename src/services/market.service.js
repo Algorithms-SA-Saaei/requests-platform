@@ -67,3 +67,48 @@ export async function marketOverview() {
     byCategory: byCat.map((c) => ({ category: c._id, count: c.n, ppmMedian: median(c.ppms) })),
   };
 }
+
+// مقارنة الأحياء: وسيط سعر المتر لكل حي في تصنيف
+export async function compareDistricts(category, { limit = 40 } = {}) {
+  const rows = await Property.aggregate([
+    { $match: { active: true, pricePerM: { $ne: null }, area: { $gte: 100 }, ...(category ? { category } : {}) } },
+    { $group: { _id: '$district', ppms: { $push: '$pricePerM' }, n: { $sum: 1 } } },
+    { $match: { n: { $gte: 3 } } },
+  ]);
+  const med = (a) => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? (v.length % 2 ? v[v.length >> 1] : Math.round((v[(v.length >> 1) - 1] + v[v.length >> 1]) / 2)) : null; };
+  return rows.map((r) => ({ district: stripHay(r._id), count: r.n, ppmMedian: med(r.ppms) }))
+    .filter((r) => r.ppmMedian).sort((a, b) => b.ppmMedian - a.ppmMedian).slice(0, limit);
+}
+
+// تسعير وحدة: تقدير السعر من وسيط سوق الحي × المساحة
+export async function priceUnit(district, category, area) {
+  const rep = await marketReport(district, category);
+  const a = +area || 0;
+  if (!rep.ppmMedian || !a) return { ...rep, area: a, estimate: null };
+  return {
+    district: stripHay(district), category, area: a, sample: rep.count,
+    ppmMedian: rep.ppmMedian, ppmMin: rep.ppmMin, ppmMax: rep.ppmMax,
+    estimate: Math.round(rep.ppmMedian * a),
+    estimateLow: Math.round(rep.ppmMin * a),
+    estimateHigh: Math.round(rep.ppmMax * a),
+  };
+}
+
+// جاهز/خارطة: وسيط سعر المتر لكل حالة بيع في حي/تصنيف
+export async function saleSplit(district, category) {
+  const q = { active: true, pricePerM: { $ne: null }, area: { $gte: 100 } };
+  if (district) q.district = stripHay(district);
+  if (category) q.category = category;
+  const rows = await Property.find(q).select('pricePerM saleType').lean();
+  const g = { ready: [], offplan: [], unknown: [] };
+  for (const r of rows) (g[r.saleType || 'unknown'] || g.unknown).push(r.pricePerM);
+  const med = (a) => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? (v.length % 2 ? v[v.length >> 1] : Math.round((v[(v.length >> 1) - 1] + v[v.length >> 1]) / 2)) : null; };
+  const diff = (g.ready.length && g.offplan.length) ? Math.round((med(g.offplan) - med(g.ready)) * 100 / med(g.ready)) : null;
+  return {
+    district: stripHay(district), category,
+    ready: { count: g.ready.length, ppmMedian: med(g.ready) },
+    offplan: { count: g.offplan.length, ppmMedian: med(g.offplan) },
+    unknown: { count: g.unknown.length },
+    offplanVsReadyPct: diff,
+  };
+}

@@ -4,7 +4,8 @@ import { ClientRequest } from '../models/ClientRequest.js';
 import { requestCounts, requestSummary, syncRequests } from '../services/saaeiRequests.service.js';
 import { matchesForRequest } from '../services/matching.service.js';
 import { tokenStatus } from '../services/saaeiToken.service.js';
-import { marketReport, districtsWithData } from '../services/market.service.js';
+import { marketReport, districtsWithData, compareDistricts, priceUnit, saleSplit } from '../services/market.service.js';
+import { demandGaps } from '../services/demand.service.js';
 import { User, verifyPassword } from '../models/User.js';
 import { signToken } from '../middleware/auth.middleware.js';
 import { env } from '../config/environment.js';
@@ -50,7 +51,7 @@ const CSS = `
 
 const shell = (title, body, user) => `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} — طلبات ساعي</title><style>${CSS}</style></head><body>
-<header><div class="b"><img src="https://saaei.co/assets/img/main_logo.svg" alt="ساعي" onerror="this.style.display='none'"><h1>طلبات ساعي</h1></div><nav style="display:flex;gap:14px;font-size:13.5px"><a href="/">الطلبات</a><a href="/market">دراسة السوق</a></nav>
+<header><div class="b"><img src="https://saaei.co/assets/img/main_logo.svg" alt="ساعي" onerror="this.style.display='none'"><h1>طلبات ساعي</h1></div><nav style="display:flex;gap:14px;font-size:13.5px"><a href="/">الطلبات</a><a href="/market">دراسة السوق</a><a href="/compare">مقارنة</a><a href="/pricing">تسعير</a><a href="/sale-split">جاهز/خارطة</a><a href="/demands">فجوات</a></nav>
 ${user ? `<div><span class="u">${esc(user.name || '')}</span> · <a class="out" href="/logout">خروج</a></div>` : ''}</header>
 <div class="wrap">${body}</div></body></html>`;
 
@@ -197,4 +198,50 @@ export async function marketPage(req, res) {
     <script>(function(){var q=document.getElementById('mdq'),box=document.getElementById('mdopts'),val=document.getElementById('mdval');if(!q)return;var items=[].slice.call(box.querySelectorAll('.dopt'));function fil(){var t=q.value.trim();box.style.display='block';items.forEach(function(it){it.style.display=(!t||it.textContent.indexOf(t)!==-1)?'':'none';});}q.addEventListener('focus',fil);q.addEventListener('input',function(){val.value='';fil();});items.forEach(function(it){it.addEventListener('mousedown',function(e){e.preventDefault();val.value=it.getAttribute('data-v');q.value=it.textContent.replace(/\s*\d+\s*$/,'').trim();box.style.display='none';q.form.submit();});});document.addEventListener('click',function(e){if(!e.target.closest('.combo'))box.style.display='none';});})();</script>
     <style>.dopts{display:none;position:absolute;top:calc(100% + 4px);right:0;left:0;max-height:300px;overflow:auto;background:#fff;border:1px solid #d3e0e2;border-radius:12px;box-shadow:0 8px 28px -12px rgba(20,40,60,.3);z-index:50}.dopt{padding:10px 14px;cursor:pointer;font-size:14px;display:flex;justify-content:space-between;border-bottom:1px solid #f0f4f5}.dopt:hover{background:#eef4f5}.dopt .dn{color:#6b7a84;font-size:12px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}.metrics .mt{background:#fff;border:1px solid #e2ebec;border-top:2px solid #229799;border-radius:0 0 10px 10px;padding:14px 16px}.metrics .mt b{display:block;font-size:26px;font-weight:800;color:#23305a}.metrics .mt span{font-size:11.5px;color:#5b6b76}.num{font-variant-numeric:tabular-nums}</style>
     ${body}`, req.user));
+}
+
+const catSel = (cat) => ['شقة','دور','فيلا','تاون هاوس','أرض'].map((x)=>`<option ${x===cat?'selected':''}>${x}</option>`).join('');
+
+// مقارنة الأحياء
+export async function comparePage(req, res) {
+  const cat = ['شقة','دور','فيلا','تاون هاوس','أرض'].includes(req.query.category)?req.query.category:'شقة';
+  const rows = await compareDistricts(cat);
+  const max = rows.length ? rows[0].ppmMedian : 1;
+  const body = `<form method="GET" action="/compare" style="margin-bottom:16px"><select name="category" onchange="this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit">${catSel(cat)}</select></form>
+    <table><thead><tr><th>#</th><th>الحي</th><th>وسيط ر/م²</th><th>العيّنة</th><th></th></tr></thead><tbody>${
+    rows.map((r,i)=>`<tr><td class="m">${i+1}</td><td><b>${esc(r.district)}</b></td><td class="num" style="color:#229799;font-weight:800">${fmt(r.ppmMedian)}</td><td class="num m">${r.count}</td><td style="width:40%"><div style="background:#eef4f5;border-radius:6px;height:10px"><div style="background:#229799;height:10px;border-radius:6px;width:${Math.round(r.ppmMedian/max*100)}%"></div></div></td></tr>`).join('')||'<tr><td colspan="5" class="m" style="text-align:center;padding:22px">لا بيانات — شغّل سحب السوق.</td></tr>'
+    }</tbody></table>`;
+  res.send(shell('مقارنة الأحياء', body, req.user));
+}
+
+// تسعير وحدة
+export async function pricePage(req, res) {
+  const cat = ['شقة','دور','فيلا','تاون هاوس','أرض'].includes(req.query.category)?req.query.category:'شقة';
+  const district = req.query.district||''; const area = req.query.area||'';
+  const dists = await districtsWithData(cat);
+  const r = (district && area) ? await priceUnit(district, cat, area) : null;
+  const dopts = dists.map((x)=>`<option value="${esc(String(x.district).replace(/^حي\s+/,''))}" ${String(x.district).replace(/^حي\s+/,'')===district?'selected':''}>${esc(String(x.district).replace(/^حي\s+/,''))} (${x.count})</option>`).join('');
+  const out = r && r.estimate ? `<div class="metrics"><div class="mt"><b>${fmt(r.estimate)}</b><span>التقدير (ريال)</span></div><div class="mt"><b>${fmt(r.estimateLow)} – ${fmt(r.estimateHigh)}</b><span>المدى</span></div><div class="mt"><b>${fmt(r.ppmMedian)}</b><span>وسيط ر/م²</span></div><div class="mt"><b>${fmt(r.sample)}</b><span>العيّنة</span></div></div><style>.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metrics .mt{background:#fff;border:1px solid #e2ebec;border-top:2px solid #229799;border-radius:0 0 10px 10px;padding:14px}.metrics b{display:block;font-size:24px;font-weight:800;color:#23305a}.metrics span{font-size:11.5px;color:#5b6b76}.num{font-variant-numeric:tabular-nums}</style>` : (district&&area?'<div class="m" style="background:#fff;border:1px dashed #cdd8da;border-radius:12px;padding:22px;text-align:center">لا بيانات كافية.</div>':'<div class="m">اختر الحي والمساحة للتقدير.</div>');
+  res.send(shell('تسعير وحدة', `<form method="GET" action="/pricing" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"><select name="category" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit">${catSel(cat)}</select><select name="district" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit;min-width:180px"><option value="">— اختر الحي —</option>${dopts}</select><input name="area" type="number" placeholder="المساحة م²" value="${esc(area)}" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit;width:130px"><button class="btn">قدّر</button></form>${out}`, req.user));
+}
+
+// فجوات الطلب
+export async function demandsPage(req, res) {
+  const rows = await demandGaps();
+  const body = `<div class="m" style="margin-bottom:12px;font-size:13px">الفجوة = طلب العملاء ناقص المعروض. الموجب = فرصة (طلب أعلى من المعروض).</div>
+    <table><thead><tr><th>الحي</th><th>التصنيف</th><th>الطلب</th><th>المعروض</th><th>الفجوة</th></tr></thead><tbody>${
+    rows.map((r)=>`<tr><td><b>${esc(r.district)}</b></td><td>${esc(r.category)}</td><td class="num">${r.demand}</td><td class="num">${r.supply}</td><td class="num" style="font-weight:800;color:${r.gap>0?'#2e8b57':'#b23a48'}">${r.gap>0?'+':''}${r.gap}</td></tr>`).join('')||'<tr><td colspan="5" class="m" style="text-align:center;padding:22px">لا بيانات.</td></tr>'
+    }</tbody></table>`;
+  res.send(shell('فجوات الطلب', body, req.user));
+}
+
+// جاهز/خارطة
+export async function saleSplitPage(req, res) {
+  const cat = ['شقة','دور','فيلا','تاون هاوس','أرض'].includes(req.query.category)?req.query.category:'شقة';
+  const district = req.query.district||'';
+  const dists = await districtsWithData(cat);
+  const r = district ? await saleSplit(district, cat) : null;
+  const dopts = dists.map((x)=>`<option value="${esc(String(x.district).replace(/^حي\s+/,''))}" ${String(x.district).replace(/^حي\s+/,'')===district?'selected':''}>${esc(String(x.district).replace(/^حي\s+/,''))}</option>`).join('');
+  const out = r ? `<div class="metrics"><div class="mt"><b>${fmt(r.ready.ppmMedian)}</b><span>جاهز — وسيط ر/م² (${r.ready.count})</span></div><div class="mt"><b>${fmt(r.offplan.ppmMedian)}</b><span>خارطة — وسيط ر/م² (${r.offplan.count})</span></div><div class="mt"><b>${r.offplanVsReadyPct==null?'—':(r.offplanVsReadyPct>0?'+':'')+r.offplanVsReadyPct+'%'}</b><span>فرق الخارطة عن الجاهز</span></div></div><style>.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.metrics .mt{background:#fff;border:1px solid #e2ebec;border-top:2px solid #229799;border-radius:0 0 10px 10px;padding:14px}.metrics b{display:block;font-size:24px;font-weight:800;color:#23305a}.metrics span{font-size:11.5px;color:#5b6b76}</style>${r.unknown.count?`<div class="m" style="margin-top:10px;font-size:12px">${r.unknown.count} وحدة بلا حالة بيع محدّدة (تظهر بعد إعادة السحب).</div>`:''}` : '<div class="m">اختر الحي.</div>';
+  res.send(shell('جاهز / خارطة', `<form method="GET" action="/sale-split" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"><select name="category" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit">${catSel(cat)}</select><select name="district" onchange="this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit;min-width:180px"><option value="">— اختر الحي —</option>${dopts}</select><button class="btn">عرض</button></form>${out}`, req.user));
 }

@@ -72,6 +72,7 @@ async function scrapeDistrict(city, district, purpose = 'for-sale') {
       lat: h._geoloc?.lat ?? null,
       lng: h._geoloc?.lng ?? null,
       url: 'https://www.bayut.sa/العقار/تفاصيل-' + h.externalID + '.html',
+      saleType: h.completionStatus === 'off-plan' ? 'offplan' : h.completionStatus === 'completed' ? 'ready' : null,
       active: true,
     };
   });
