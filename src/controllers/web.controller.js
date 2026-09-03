@@ -36,9 +36,10 @@ const CSS = `
   tr:last-child td{border-bottom:0}
   .chip{display:inline-block;background:#e7f0f1;color:#23305a;border-radius:16px;padding:2px 9px;margin:2px;font-size:11.5px}
   .st{display:inline-block;border-radius:14px;padding:2px 10px;font-size:11.5px;font-weight:700}
-  .m{color:#6b7a84} .pg{display:flex;gap:8px;justify-content:center;margin-top:16px;align-items:center}
-  .pg a{padding:7px 14px;border:1px solid #e2ebec;border-radius:9px;background:#fff;font-weight:700;font-size:13px}
-  .pg .cur{color:#6b7a84;font-size:13px}
+  .m{color:#6b7a84} .pg{display:flex;gap:6px;justify-content:center;margin-top:16px;align-items:center;flex-wrap:wrap}
+  .pg a{padding:6px 12px;border:1px solid #e2ebec;border-radius:9px;background:#fff;font-weight:700;font-size:13px;color:#23305a}
+  .pg a.on{background:#23305a;color:#fff;border-color:#23305a}
+  .pg .cur{color:#6b7a84;font-size:13px;margin:0 4px}
   .mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
   .mcard{background:#fff;border:1px solid #e2ebec;border-radius:14px;overflow:hidden;display:flex}
   .mscore{color:#fff;font-weight:800;font-size:17px;display:flex;align-items:center;justify-content:center;min-width:60px}
@@ -53,7 +54,7 @@ const CSS = `
 
 const shell = (title, body, user, extraHead = '') => `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} — طلبات ساعي</title>${extraHead}<style>${CSS}</style></head><body>
-<header><div class="b"><img src="https://saaei.co/assets/img/main_logo.svg" alt="ساعي" onerror="this.style.display='none'"><h1>طلبات ساعي</h1></div><nav style="display:flex;gap:14px;font-size:13.5px;flex-wrap:wrap"><a href="/">الطلبات</a><a href="/market">دراسة السوق</a><a href="/compare">مقارنة</a><a href="/pricing">تسعير</a><a href="/sale-split">جاهز/خارطة</a><a href="/projects">المشاريع</a><a href="/demands">فجوات</a><a href="/map">الخريطة</a><a href="/nearby">قرب موقع</a><a href="/analytics">تحليلات</a><a href="/trends">الاتجاه</a>${user && (user.role === 'admin' || user.role === 'manager') ? '<a href="/calibration">المعايرة</a><a href="/health">الصحة</a><a href="/crawl-center">السحب</a><a href="/export/properties.csv">تصدير</a>' : ''}</nav>
+<header><div class="b"><img src="https://saaei.co/assets/img/main_logo.svg" alt="ساعي" onerror="this.style.display='none'"><h1>طلبات ساعي</h1></div><nav style="display:flex;gap:14px;font-size:13.5px;flex-wrap:wrap"><a href="/">الطلبات</a><a href="/market">دراسة السوق</a><a href="/compare">مقارنة</a><a href="/pricing">تسعير</a><a href="/sale-split">جاهز/خارطة</a><a href="/projects">المشاريع</a><a href="/demands">فجوات</a><a href="/map">الخريطة</a><a href="/nearby">قرب موقع</a><a href="/analytics">تحليلات</a><a href="/trends">الاتجاه</a>${user && (user.role === 'admin' || user.role === 'manager') ? '<a href="/calibration">المعايرة</a><a href="/crawl-center">السحب</a><a href="/export/properties.csv">تصدير</a>' : ''}</nav>
 ${user ? `<div><span class="u">${esc(user.name || '')}</span> · <a class="out" href="/logout">خروج</a></div>` : ''}</header>
 <div class="wrap">${body}</div></body></html>`;
 
@@ -104,11 +105,11 @@ export async function dashboard(req, res) {
   const tabs = TABS.map((t) => `<a class="tab${t.k === tabDef.k ? ' on' : ''}" href="/?tab=${t.k}">${t.label} <span class="tn">${(cnt[t.k] || 0).toLocaleString('en-US')}</span></a>`).join('');
   const rows = items.map((r) => {
     const chips = [r.category, r.beds ? r.beds + ' غرف' : '', r.district || r.city,
-      (r.priceMin || r.priceMax) ? `${fmt(r.priceMin)}–${fmt(r.priceMax)} ر` : '']
+    (r.priceMin || r.priceMax) ? `${fmt(r.priceMin)}–${fmt(r.priceMax)} ر` : '']
       .filter(Boolean).map((c) => `<span class="chip">${esc(c)}</span>`).join('');
     const badge = r.matched === 1 ? '<span class="st" style="background:#eaf5ef;color:#2e8b57">مطابَق</span>'
       : r.matched === 0 ? '<span class="st" style="background:#fbf3e2;color:#a86e12">فرصة</span>'
-      : '<span class="st" style="background:#eef2f3;color:#6b7a84">غير محدَّد</span>';
+        : '<span class="st" style="background:#eef2f3;color:#6b7a84">غير محدَّد</span>';
     return `<tr>
       <td><b>${esc(r.clientName || 'عميل')}</b>${r.phone ? `<div class="m" style="font-size:11px">${esc(r.phone)}</div>` : ''}</td>
       <td>${chips || '<span class="m">—</span>'}</td>
@@ -118,10 +119,23 @@ export async function dashboard(req, res) {
     </tr>`;
   }).join('');
   const pageCount = Math.ceil(total / limit) || 1;
+  const pageBtns = [];
+  const maxBtns = 5;
+  let startP = Math.max(1, page - 2);
+  let endP = Math.min(pageCount, startP + maxBtns - 1);
+  if (endP - startP < maxBtns - 1) startP = Math.max(1, endP - maxBtns + 1);
+
+  for (let i = startP; i <= endP; i++) {
+    pageBtns.push(`<a class="${i === page ? 'on' : ''}" href="/?tab=${tabDef.k}&page=${i}">${i}</a>`);
+  }
+
   const pager = `<div class="pg">
     ${page > 1 ? `<a href="/?tab=${tabDef.k}&page=${page - 1}">→ السابق</a>` : ''}
-    <span class="cur">صفحة ${page} من ${pageCount} · ${total} طلب</span>
-    ${page < pageCount ? `<a href="/?tab=${tabDef.k}&page=${page + 1}">التالي ←</a>` : ''}</div>`;
+    ${startP > 1 ? `<a href="/?tab=${tabDef.k}&page=1">1</a>${startP > 2 ? '<span class="cur">…</span>' : ''}` : ''}
+    ${pageBtns.join('')}
+    ${endP < pageCount ? `${endP < pageCount - 1 ? '<span class="cur">…</span>' : ''}<a href="/?tab=${tabDef.k}&page=${pageCount}">${pageCount}</a>` : ''}
+    ${page < pageCount ? `<a href="/?tab=${tabDef.k}&page=${page + 1}">التالي ←</a>` : ''}
+    <span class="cur">(${total} طلب)</span></div>`;
   const body = `
     ${tabs ? `<div class="tabs">${tabs}</div>` : ''}
     <div class="bar">
@@ -130,7 +144,7 @@ export async function dashboard(req, res) {
     </div>
     <table><thead><tr><th>العميل</th><th>الطلب</th><th>الحالة</th><th>التاريخ</th><th>المطابقة</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="5" class="m" style="text-align:center;padding:26px">لا طلبات — شغّل المزامنة.</td></tr>'}</tbody></table>
-    ${total > limit ? pager : ''}`;
+    ${pager}`;
   res.send(shell('طلبات ساعي', body, req.user));
 }
 
@@ -140,7 +154,7 @@ export async function requestDetailPage(req, res) {
   catch { return res.status(404).send(shell('غير موجود', '<p class="m">الطلب غير موجود.</p>', req.user)); }
   const r = data.request;
   const chips = [r.category, r.beds ? r.beds + ' غرف' : '', r.district || r.city, r.purpose,
-    (r.priceMin || r.priceMax) ? `${fmt(r.priceMin)}–${fmt(r.priceMax)} ر` : '']
+  (r.priceMin || r.priceMax) ? `${fmt(r.priceMin)}–${fmt(r.priceMax)} ر` : '']
     .filter(Boolean).map((c) => `<span class="chip">${esc(c)}</span>`).join('');
   const tone = (s) => (s >= 80 ? '#2e8b57' : s >= 55 ? '#23305a' : '#c0504d');
   const cards = data.results.map((u) => `
@@ -185,8 +199,7 @@ export async function marketPage(req, res) {
       ${kpi(rep.ppmMax, 'أعلى سعر متر')}
     </div>
     <div class="bar"><b style="color:#23305a">عيّنة من السوق</b> <span class="m">أعلى ${rep.sample.length}</span></div>
-    <table><thead><tr><th>الحي</th><th>المساحة</th><th>السعر</th><th>ر/م²</th><th>المصدر</th><th></th></tr></thead><tbody>${
-      rep.sample.map((u) => `<tr><td>${esc(stripHay(u.district))}</td><td class="num">${fmt(u.area)}م²</td><td class="num">${fmt(u.price)}</td><td class="num" style="color:#229799;font-weight:800">${fmt(u.pricePerM)}</td><td class="m">${esc(u.source)}</td><td>${u.url ? `<a href="${esc(u.url)}" target="_blank">المصدر ↗</a>` : ''}</td></tr>`).join('')
+    <table><thead><tr><th>الحي</th><th>المساحة</th><th>السعر</th><th>ر/م²</th><th>المصدر</th><th></th></tr></thead><tbody>${rep.sample.map((u) => `<tr><td>${esc(stripHay(u.district))}</td><td class="num">${fmt(u.area)}م²</td><td class="num">${fmt(u.price)}</td><td class="num" style="color:#229799;font-weight:800">${fmt(u.pricePerM)}</td><td class="m">${esc(u.source)}</td><td>${u.url ? `<a href="${esc(u.url)}" target="_blank">المصدر ↗</a>` : ''}</td></tr>`).join('')
     }</tbody></table>` : (district ? '<div class="m" style="background:#fff;border:1px dashed #cdd8da;border-radius:12px;padding:22px;text-align:center">لا بيانات كافية لهذا الحي — شغّل سحب السوق أولًا.</div>' : '<div class="m" style="background:#fff;border:1px dashed #cdd8da;border-radius:12px;padding:22px;text-align:center">اختر التصنيف وابحث عن حي لعرض دراسته.</div>');
   res.send(shell('دراسة السوق', `
     <form class="mform" method="GET" action="/market" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
@@ -202,28 +215,27 @@ export async function marketPage(req, res) {
     ${body}`, req.user));
 }
 
-const catSel = (cat) => ['شقة','دور','فيلا','تاون هاوس','أرض'].map((x)=>`<option ${x===cat?'selected':''}>${x}</option>`).join('');
+const catSel = (cat) => ['شقة', 'دور', 'فيلا', 'تاون هاوس', 'أرض'].map((x) => `<option ${x === cat ? 'selected' : ''}>${x}</option>`).join('');
 
 // مقارنة الأحياء
 export async function comparePage(req, res) {
-  const cat = ['شقة','دور','فيلا','تاون هاوس','أرض'].includes(req.query.category)?req.query.category:'شقة';
+  const cat = ['شقة', 'دور', 'فيلا', 'تاون هاوس', 'أرض'].includes(req.query.category) ? req.query.category : 'شقة';
   const rows = await compareDistricts(cat);
   const max = rows.length ? rows[0].ppmMedian : 1;
   const body = `<form method="GET" action="/compare" style="margin-bottom:16px"><select name="category" onchange="this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit">${catSel(cat)}</select></form>
-    <table><thead><tr><th>#</th><th>الحي</th><th>وسيط ر/م²</th><th>العيّنة</th><th></th></tr></thead><tbody>${
-    rows.map((r,i)=>`<tr><td class="m">${i+1}</td><td><b>${esc(r.district)}</b></td><td class="num" style="color:#229799;font-weight:800">${fmt(r.ppmMedian)}</td><td class="num m">${r.count}</td><td style="width:40%"><div style="background:#eef4f5;border-radius:6px;height:10px"><div style="background:#229799;height:10px;border-radius:6px;width:${Math.round(r.ppmMedian/max*100)}%"></div></div></td></tr>`).join('')||'<tr><td colspan="5" class="m" style="text-align:center;padding:22px">لا بيانات — شغّل سحب السوق.</td></tr>'
+    <table><thead><tr><th>#</th><th>الحي</th><th>وسيط ر/م²</th><th>العيّنة</th><th></th></tr></thead><tbody>${rows.map((r, i) => `<tr><td class="m">${i + 1}</td><td><b>${esc(r.district)}</b></td><td class="num" style="color:#229799;font-weight:800">${fmt(r.ppmMedian)}</td><td class="num m">${r.count}</td><td style="width:40%"><div style="background:#eef4f5;border-radius:6px;height:10px"><div style="background:#229799;height:10px;border-radius:6px;width:${Math.round(r.ppmMedian / max * 100)}%"></div></div></td></tr>`).join('') || '<tr><td colspan="5" class="m" style="text-align:center;padding:22px">لا بيانات — شغّل سحب السوق.</td></tr>'
     }</tbody></table>`;
   res.send(shell('مقارنة الأحياء', body, req.user));
 }
 
 // تسعير وحدة
 export async function pricePage(req, res) {
-  const cat = ['شقة','دور','فيلا','تاون هاوس','أرض'].includes(req.query.category)?req.query.category:'شقة';
-  const district = req.query.district||''; const area = req.query.area||'';
+  const cat = ['شقة', 'دور', 'فيلا', 'تاون هاوس', 'أرض'].includes(req.query.category) ? req.query.category : 'شقة';
+  const district = req.query.district || ''; const area = req.query.area || '';
   const dists = await districtsWithData(cat);
   const r = (district && area) ? await priceUnit(district, cat, area) : null;
-  const dopts = dists.map((x)=>`<option value="${esc(String(x.district).replace(/^حي\s+/,''))}" ${String(x.district).replace(/^حي\s+/,'')===district?'selected':''}>${esc(String(x.district).replace(/^حي\s+/,''))} (${x.count})</option>`).join('');
-  const out = r && r.estimate ? `<div class="metrics"><div class="mt"><b>${fmt(r.estimate)}</b><span>التقدير (ريال)</span></div><div class="mt"><b>${fmt(r.estimateLow)} – ${fmt(r.estimateHigh)}</b><span>المدى</span></div><div class="mt"><b>${fmt(r.ppmMedian)}</b><span>وسيط ر/م²</span></div><div class="mt"><b>${fmt(r.sample)}</b><span>العيّنة</span></div></div><style>.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metrics .mt{background:#fff;border:1px solid #e2ebec;border-top:2px solid #229799;border-radius:0 0 10px 10px;padding:14px}.metrics b{display:block;font-size:24px;font-weight:800;color:#23305a}.metrics span{font-size:11.5px;color:#5b6b76}.num{font-variant-numeric:tabular-nums}</style>` : (district&&area?'<div class="m" style="background:#fff;border:1px dashed #cdd8da;border-radius:12px;padding:22px;text-align:center">لا بيانات كافية.</div>':'<div class="m">اختر الحي والمساحة للتقدير.</div>');
+  const dopts = dists.map((x) => `<option value="${esc(String(x.district).replace(/^حي\s+/, ''))}" ${String(x.district).replace(/^حي\s+/, '') === district ? 'selected' : ''}>${esc(String(x.district).replace(/^حي\s+/, ''))} (${x.count})</option>`).join('');
+  const out = r && r.estimate ? `<div class="metrics"><div class="mt"><b>${fmt(r.estimate)}</b><span>التقدير (ريال)</span></div><div class="mt"><b>${fmt(r.estimateLow)} – ${fmt(r.estimateHigh)}</b><span>المدى</span></div><div class="mt"><b>${fmt(r.ppmMedian)}</b><span>وسيط ر/م²</span></div><div class="mt"><b>${fmt(r.sample)}</b><span>العيّنة</span></div></div><style>.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metrics .mt{background:#fff;border:1px solid #e2ebec;border-top:2px solid #229799;border-radius:0 0 10px 10px;padding:14px}.metrics b{display:block;font-size:24px;font-weight:800;color:#23305a}.metrics span{font-size:11.5px;color:#5b6b76}.num{font-variant-numeric:tabular-nums}</style>` : (district && area ? '<div class="m" style="background:#fff;border:1px dashed #cdd8da;border-radius:12px;padding:22px;text-align:center">لا بيانات كافية.</div>' : '<div class="m">اختر الحي والمساحة للتقدير.</div>');
   res.send(shell('تسعير وحدة', `<form method="GET" action="/pricing" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"><select name="category" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit">${catSel(cat)}</select><select name="district" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit;min-width:180px"><option value="">— اختر الحي —</option>${dopts}</select><input name="area" type="number" placeholder="المساحة م²" value="${esc(area)}" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit;width:130px"><button class="btn">قدّر</button></form>${out}`, req.user));
 }
 
@@ -231,20 +243,19 @@ export async function pricePage(req, res) {
 export async function demandsPage(req, res) {
   const rows = await demandGaps();
   const body = `<div class="m" style="margin-bottom:12px;font-size:13px">الفجوة = طلب العملاء ناقص المعروض. الموجب = فرصة (طلب أعلى من المعروض).</div>
-    <table><thead><tr><th>الحي</th><th>التصنيف</th><th>الطلب</th><th>المعروض</th><th>الفجوة</th></tr></thead><tbody>${
-    rows.map((r)=>`<tr><td><b>${esc(r.district)}</b></td><td>${esc(r.category)}</td><td class="num">${r.demand}</td><td class="num">${r.supply}</td><td class="num" style="font-weight:800;color:${r.gap>0?'#2e8b57':'#b23a48'}">${r.gap>0?'+':''}${r.gap}</td></tr>`).join('')||'<tr><td colspan="5" class="m" style="text-align:center;padding:22px">لا بيانات.</td></tr>'
+    <table><thead><tr><th>الحي</th><th>التصنيف</th><th>الطلب</th><th>المعروض</th><th>الفجوة</th></tr></thead><tbody>${rows.map((r) => `<tr><td><b>${esc(r.district)}</b></td><td>${esc(r.category)}</td><td class="num">${r.demand}</td><td class="num">${r.supply}</td><td class="num" style="font-weight:800;color:${r.gap > 0 ? '#2e8b57' : '#b23a48'}">${r.gap > 0 ? '+' : ''}${r.gap}</td></tr>`).join('') || '<tr><td colspan="5" class="m" style="text-align:center;padding:22px">لا بيانات.</td></tr>'
     }</tbody></table>`;
   res.send(shell('فجوات الطلب', body, req.user));
 }
 
 // جاهز/خارطة
 export async function saleSplitPage(req, res) {
-  const cat = ['شقة','دور','فيلا','تاون هاوس','أرض'].includes(req.query.category)?req.query.category:'شقة';
-  const district = req.query.district||'';
+  const cat = ['شقة', 'دور', 'فيلا', 'تاون هاوس', 'أرض'].includes(req.query.category) ? req.query.category : 'شقة';
+  const district = req.query.district || '';
   const dists = await districtsWithData(cat);
   const r = district ? await saleSplit(district, cat) : null;
-  const dopts = dists.map((x)=>`<option value="${esc(String(x.district).replace(/^حي\s+/,''))}" ${String(x.district).replace(/^حي\s+/,'')===district?'selected':''}>${esc(String(x.district).replace(/^حي\s+/,''))}</option>`).join('');
-  const out = r ? `<div class="metrics"><div class="mt"><b>${fmt(r.ready.ppmMedian)}</b><span>جاهز — وسيط ر/م² (${r.ready.count})</span></div><div class="mt"><b>${fmt(r.offplan.ppmMedian)}</b><span>خارطة — وسيط ر/م² (${r.offplan.count})</span></div><div class="mt"><b>${r.offplanVsReadyPct==null?'—':(r.offplanVsReadyPct>0?'+':'')+r.offplanVsReadyPct+'%'}</b><span>فرق الخارطة عن الجاهز</span></div></div><style>.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.metrics .mt{background:#fff;border:1px solid #e2ebec;border-top:2px solid #229799;border-radius:0 0 10px 10px;padding:14px}.metrics b{display:block;font-size:24px;font-weight:800;color:#23305a}.metrics span{font-size:11.5px;color:#5b6b76}</style>${r.unknown.count?`<div class="m" style="margin-top:10px;font-size:12px">${r.unknown.count} وحدة بلا حالة بيع محدّدة (تظهر بعد إعادة السحب).</div>`:''}` : '<div class="m">اختر الحي.</div>';
+  const dopts = dists.map((x) => `<option value="${esc(String(x.district).replace(/^حي\s+/, ''))}" ${String(x.district).replace(/^حي\s+/, '') === district ? 'selected' : ''}>${esc(String(x.district).replace(/^حي\s+/, ''))}</option>`).join('');
+  const out = r ? `<div class="metrics"><div class="mt"><b>${fmt(r.ready.ppmMedian)}</b><span>جاهز — وسيط ر/م² (${r.ready.count})</span></div><div class="mt"><b>${fmt(r.offplan.ppmMedian)}</b><span>خارطة — وسيط ر/م² (${r.offplan.count})</span></div><div class="mt"><b>${r.offplanVsReadyPct == null ? '—' : (r.offplanVsReadyPct > 0 ? '+' : '') + r.offplanVsReadyPct + '%'}</b><span>فرق الخارطة عن الجاهز</span></div></div><style>.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.metrics .mt{background:#fff;border:1px solid #e2ebec;border-top:2px solid #229799;border-radius:0 0 10px 10px;padding:14px}.metrics b{display:block;font-size:24px;font-weight:800;color:#23305a}.metrics span{font-size:11.5px;color:#5b6b76}</style>${r.unknown.count ? `<div class="m" style="margin-top:10px;font-size:12px">${r.unknown.count} وحدة بلا حالة بيع محدّدة (تظهر بعد إعادة السحب).</div>` : ''}` : '<div class="m">اختر الحي.</div>';
   res.send(shell('جاهز / خارطة', `<form method="GET" action="/sale-split" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"><select name="category" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit">${catSel(cat)}</select><select name="district" onchange="this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit;min-width:180px"><option value="">— اختر الحي —</option>${dopts}</select><button class="btn">عرض</button></form>${out}`, req.user));
 }
 
@@ -253,12 +264,12 @@ const ppmColor = 'function(p){return p==null?"#6b7a84":p<3000?"#1a9850":p<6000?"
 
 // الخريطة
 export async function mapPage(req, res) {
-  const cat = ['شقة','دور','فيلا','تاون هاوس','أرض'].includes(req.query.category)?req.query.category:'شقة';
-  const district = req.query.district||'';
+  const cat = ['شقة', 'دور', 'فيلا', 'تاون هاوس', 'أرض'].includes(req.query.category) ? req.query.category : 'شقة';
+  const district = req.query.district || '';
   const dists = await districtsWithData(cat);
-  const pts = await mapProperties(district||null, cat);
-  const dopts = dists.map((x)=>`<option value="${esc(String(x.district).replace(/^حي\s+/,''))}" ${String(x.district).replace(/^حي\s+/,'')===district?'selected':''}>${esc(String(x.district).replace(/^حي\s+/,''))} (${x.count})</option>`).join('');
-  const body = `<form method="GET" action="/map" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"><select name="category" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit">${['شقة','دور','فيلا','تاون هاوس','أرض'].map(x=>`<option ${x===cat?'selected':''}>${x}</option>`).join('')}</select><select name="district" onchange="this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit;min-width:180px"><option value="">— كل الأحياء —</option>${dopts}</select><button class="btn">عرض</button></form>
+  const pts = await mapProperties(district || null, cat);
+  const dopts = dists.map((x) => `<option value="${esc(String(x.district).replace(/^حي\s+/, ''))}" ${String(x.district).replace(/^حي\s+/, '') === district ? 'selected' : ''}>${esc(String(x.district).replace(/^حي\s+/, ''))} (${x.count})</option>`).join('');
+  const body = `<form method="GET" action="/map" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"><select name="category" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit">${['شقة', 'دور', 'فيلا', 'تاون هاوس', 'أرض'].map(x => `<option ${x === cat ? 'selected' : ''}>${x}</option>`).join('')}</select><select name="district" onchange="this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit;min-width:180px"><option value="">— كل الأحياء —</option>${dopts}</select><button class="btn">عرض</button></form>
     <div class="m" style="font-size:12px;margin-bottom:8px">${pts.length} عقار على الخريطة · اللون حسب سعر المتر (أخضر أرخص، أحمر أغلى)</div>
     <div id="map" style="height:520px;border-radius:14px;border:1px solid #e2ebec;overflow:hidden"></div>
     <script>var PTS=${JSON.stringify(pts)};var col=${ppmColor};
@@ -272,53 +283,53 @@ export async function mapPage(req, res) {
 
 // وحدات قرب موقع
 export async function nearbyPage(req, res) {
-  const cat = req.query.category && ['شقة','دور','فيلا','تاون هاوس','أرض'].includes(req.query.category)?req.query.category:'';
-  const lat=req.query.lat, lng=req.query.lng, radius=+req.query.radius||3;
-  const data = (lat&&lng)?await nearbyProperties(lat,lng,{radius,category:cat||null}):null;
-  const list = data ? data.results.map(u=>`<tr><td>${esc(u.category||'')}</td><td>${esc(u.district||'')}</td><td class="num">${fmt(u.area)}م²</td><td class="num">${fmt(u.price)}</td><td class="num" style="color:#229799;font-weight:800">${fmt(u.pricePerM)}</td><td class="num m">${u.dist}كم</td><td>${u.url?`<a href="${esc(u.url)}" target="_blank">↗</a>`:''}</td></tr>`).join('') : '';
+  const cat = req.query.category && ['شقة', 'دور', 'فيلا', 'تاون هاوس', 'أرض'].includes(req.query.category) ? req.query.category : '';
+  const lat = req.query.lat, lng = req.query.lng, radius = +req.query.radius || 3;
+  const data = (lat && lng) ? await nearbyProperties(lat, lng, { radius, category: cat || null }) : null;
+  const list = data ? data.results.map(u => `<tr><td>${esc(u.category || '')}</td><td>${esc(u.district || '')}</td><td class="num">${fmt(u.area)}م²</td><td class="num">${fmt(u.price)}</td><td class="num" style="color:#229799;font-weight:800">${fmt(u.pricePerM)}</td><td class="num m">${u.dist}كم</td><td>${u.url ? `<a href="${esc(u.url)}" target="_blank">↗</a>` : ''}</td></tr>`).join('') : '';
   const body = `<form method="GET" action="/nearby" id="nf" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
-      <select name="category" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit"><option value="">كل الأنواع</option>${['شقة','دور','فيلا','تاون هاوس','أرض'].map(x=>`<option ${x===cat?'selected':''}>${x}</option>`).join('')}</select>
-      <input name="lat" id="lat" placeholder="خط العرض" value="${esc(lat||'')}" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;width:130px">
-      <input name="lng" id="lng" placeholder="خط الطول" value="${esc(lng||'')}" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;width:130px">
-      <select name="radius" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2"><option value="1" ${radius===1?'selected':''}>1كم</option><option value="3" ${radius===3?'selected':''}>3كم</option><option value="5" ${radius===5?'selected':''}>5كم</option></select>
+      <select name="category" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit"><option value="">كل الأنواع</option>${['شقة', 'دور', 'فيلا', 'تاون هاوس', 'أرض'].map(x => `<option ${x === cat ? 'selected' : ''}>${x}</option>`).join('')}</select>
+      <input name="lat" id="lat" placeholder="خط العرض" value="${esc(lat || '')}" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;width:130px">
+      <input name="lng" id="lng" placeholder="خط الطول" value="${esc(lng || '')}" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;width:130px">
+      <select name="radius" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2"><option value="1" ${radius === 1 ? 'selected' : ''}>1كم</option><option value="3" ${radius === 3 ? 'selected' : ''}>3كم</option><option value="5" ${radius === 5 ? 'selected' : ''}>5كم</option></select>
       <button type="button" class="btn" style="background:#6b7a84" onclick="navigator.geolocation.getCurrentPosition(function(p){document.getElementById('lat').value=p.coords.latitude.toFixed(6);document.getElementById('lng').value=p.coords.longitude.toFixed(6);document.getElementById('nf').submit();})">📍 موقعي</button>
       <button class="btn">بحث</button></form>
-    ${data?`<div class="m" style="font-size:12px;margin-bottom:8px">${data.results.length} وحدة ضمن ${radius}كم</div><table><thead><tr><th>النوع</th><th>الحي</th><th>المساحة</th><th>السعر</th><th>ر/م²</th><th>المسافة</th><th></th></tr></thead><tbody>${list||'<tr><td colspan="7" class="m" style="text-align:center;padding:20px">لا وحدات قريبة.</td></tr>'}</tbody></table>`:'<div class="m">أدخل إحداثيات أو اضغط «موقعي».</div>'}`;
+    ${data ? `<div class="m" style="font-size:12px;margin-bottom:8px">${data.results.length} وحدة ضمن ${radius}كم</div><table><thead><tr><th>النوع</th><th>الحي</th><th>المساحة</th><th>السعر</th><th>ر/م²</th><th>المسافة</th><th></th></tr></thead><tbody>${list || '<tr><td colspan="7" class="m" style="text-align:center;padding:20px">لا وحدات قريبة.</td></tr>'}</tbody></table>` : '<div class="m">أدخل إحداثيات أو اضغط «موقعي».</div>'}`;
   res.send(shell('وحدات قرب موقع', body, req.user));
 }
 
 // التحليلات
 export async function analyticsPage(req, res) {
   const [ov, top] = await Promise.all([marketOverview(), compareDistricts('شقة', { limit: 12 })]);
-  const maxCat = Math.max(1, ...ov.byCategory.map(c=>c.ppmMedian||0));
-  const maxD = Math.max(1, ...top.map(d=>d.ppmMedian||0));
-  const bar=(v,mx,lab,n)=>`<div style="margin:6px 0"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(lab)} <span class="m">${n?'('+n+')':''}</span></span><b style="color:#229799">${fmt(v)}</b></div><div style="background:#eef4f5;border-radius:6px;height:12px"><div style="background:#229799;height:12px;border-radius:6px;width:${Math.round((v||0)/mx*100)}%"></div></div></div>`;
+  const maxCat = Math.max(1, ...ov.byCategory.map(c => c.ppmMedian || 0));
+  const maxD = Math.max(1, ...top.map(d => d.ppmMedian || 0));
+  const bar = (v, mx, lab, n) => `<div style="margin:6px 0"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(lab)} <span class="m">${n ? '(' + n + ')' : ''}</span></span><b style="color:#229799">${fmt(v)}</b></div><div style="background:#eef4f5;border-radius:6px;height:12px"><div style="background:#229799;height:12px;border-radius:6px;width:${Math.round((v || 0) / mx * 100)}%"></div></div></div>`;
   const body = `<div class="metrics" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
       <div class="mt"><b>${fmt(ov.total)}</b><span>إجمالي المخزون</span></div>
-      ${ov.bySource.map(s=>`<div class="mt"><b>${fmt(s.count)}</b><span>${esc(s.source)}</span></div>`).join('')}
+      ${ov.bySource.map(s => `<div class="mt"><b>${fmt(s.count)}</b><span>${esc(s.source)}</span></div>`).join('')}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
-      <div><b style="color:#23305a">وسيط سعر المتر حسب التصنيف</b>${ov.byCategory.map(c=>bar(c.ppmMedian,maxCat,c.category,c.count)).join('')}</div>
-      <div><b style="color:#23305a">أغلى الأحياء (شقق)</b>${top.map(d=>bar(d.ppmMedian,maxD,d.district,d.count)).join('')}</div>
+      <div><b style="color:#23305a">وسيط سعر المتر حسب التصنيف</b>${ov.byCategory.map(c => bar(c.ppmMedian, maxCat, c.category, c.count)).join('')}</div>
+      <div><b style="color:#23305a">أغلى الأحياء (شقق)</b>${top.map(d => bar(d.ppmMedian, maxD, d.district, d.count)).join('')}</div>
     </div>
     <style>.metrics .mt{background:#fff;border:1px solid #e2ebec;border-top:2px solid #229799;border-radius:0 0 10px 10px;padding:14px}.metrics b{display:block;font-size:24px;font-weight:800;color:#23305a}.metrics span{font-size:11.5px;color:#5b6b76}</style>`;
   res.send(shell('التحليلات', body, req.user));
 }
 
-const CATS = ['شقة','دور','فيلا','تاون هاوس','أرض'];
-const catOpts = (sel) => ['<option value="">كل الأنواع</option>'].concat(CATS.map(c=>`<option ${c===sel?'selected':''}>${c}</option>`)).join('');
+const CATS = ['شقة', 'دور', 'فيلا', 'تاون هاوس', 'أرض'];
+const catOpts = (sel) => ['<option value="">كل الأنواع</option>'].concat(CATS.map(c => `<option ${c === sel ? 'selected' : ''}>${c}</option>`)).join('');
 
 // المشاريع/المجمّعات
 export async function projectsPage(req, res) {
-  const cat = CATS.includes(req.query.category)?req.query.category:'';
-  const st = ['ready','offplan'].includes(req.query.saleType)?req.query.saleType:'';
-  const rows = await projectsList({ category:cat||null, saleType:st||null });
-  const list = rows.map(p=>`<tr><td><b>${esc(p.project)}</b></td><td class="m">${esc(p.districts.slice(0,2).join('، '))}${p.districts.length>2?' +'+(p.districts.length-2):''}</td><td class="m">${esc(p.categories.join('، '))}</td><td class="num">${fmt(p.count)}</td><td class="num" style="color:#229799;font-weight:800">${fmt(p.ppmMedian)}</td><td class="num m">${p.ready?'جاهز '+p.ready:''}${p.ready&&p.offplan?' · ':''}${p.offplan?'خارطة '+p.offplan:''}</td></tr>`).join('');
+  const cat = CATS.includes(req.query.category) ? req.query.category : '';
+  const st = ['ready', 'offplan'].includes(req.query.saleType) ? req.query.saleType : '';
+  const rows = await projectsList({ category: cat || null, saleType: st || null });
+  const list = rows.map(p => `<tr><td><b>${esc(p.project)}</b></td><td class="m">${esc(p.districts.slice(0, 2).join('، '))}${p.districts.length > 2 ? ' +' + (p.districts.length - 2) : ''}</td><td class="m">${esc(p.categories.join('، '))}</td><td class="num">${fmt(p.count)}</td><td class="num" style="color:#229799;font-weight:800">${fmt(p.ppmMedian)}</td><td class="num m">${p.ready ? 'جاهز ' + p.ready : ''}${p.ready && p.offplan ? ' · ' : ''}${p.offplan ? 'خارطة ' + p.offplan : ''}</td></tr>`).join('');
   const body = `<form method="GET" action="/projects" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
       <select name="category" onchange="this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit">${catOpts(cat)}</select>
-      <select name="saleType" onchange="this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit"><option value="">جاهز + خارطة</option><option value="ready" ${st==='ready'?'selected':''}>جاهز فقط</option><option value="offplan" ${st==='offplan'?'selected':''}>خارطة فقط</option></select></form>
+      <select name="saleType" onchange="this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit"><option value="">جاهز + خارطة</option><option value="ready" ${st === 'ready' ? 'selected' : ''}>جاهز فقط</option><option value="offplan" ${st === 'offplan' ? 'selected' : ''}>خارطة فقط</option></select></form>
     <div class="m" style="font-size:12px;margin-bottom:8px">${rows.length} مشروع/مجمّع بالمخزون</div>
-    <table><thead><tr><th>المشروع</th><th>الأحياء</th><th>الأنواع</th><th>وحدات</th><th>وسيط ر/م²</th><th>النوع</th></tr></thead><tbody>${list||'<tr><td colspan="6" class="m" style="text-align:center;padding:20px">لا مشاريع مسمّاة بعد — تظهر بعد سحب فيه أسماء مشاريع.</td></tr>'}</tbody></table>`;
+    <table><thead><tr><th>المشروع</th><th>الأحياء</th><th>الأنواع</th><th>وحدات</th><th>وسيط ر/م²</th><th>النوع</th></tr></thead><tbody>${list || '<tr><td colspan="6" class="m" style="text-align:center;padding:20px">لا مشاريع مسمّاة بعد — تظهر بعد سحب فيه أسماء مشاريع.</td></tr>'}</tbody></table>`;
   res.send(shell('المشاريع', body, req.user));
 }
 
@@ -333,10 +344,10 @@ export async function healthPage(req, res) {
       <div class="mt"><b>${fmt(h.missing.noPrice)}</b><span>بلا سعر</span></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
-      <div><b style="color:#23305a">حسب المصدر</b><table style="margin-top:8px"><thead><tr><th>المصدر</th><th>عدد</th><th>آخر تحديث</th></tr></thead><tbody>${h.bySource.map(s=>`<tr><td>${esc(s.source)}</td><td class="num">${fmt(s.count)}</td><td class="m">${s.last?new Date(s.last).toLocaleDateString('ar-SA'):'—'}</td></tr>`).join('')||'<tr><td colspan="3" class="m">لا بيانات</td></tr>'}</tbody></table></div>
-      <div><b style="color:#23305a">حسب التصنيف</b><table style="margin-top:8px"><thead><tr><th>التصنيف</th><th>عدد</th></tr></thead><tbody>${h.byCategory.map(c=>`<tr><td>${esc(c.category||'—')}</td><td class="num">${fmt(c.count)}</td></tr>`).join('')}</tbody></table></div>
+      <div><b style="color:#23305a">حسب المصدر</b><table style="margin-top:8px"><thead><tr><th>المصدر</th><th>عدد</th><th>آخر تحديث</th></tr></thead><tbody>${h.bySource.map(s => `<tr><td>${esc(s.source)}</td><td class="num">${fmt(s.count)}</td><td class="m">${s.last ? new Date(s.last).toLocaleDateString('ar-SA') : '—'}</td></tr>`).join('') || '<tr><td colspan="3" class="m">لا بيانات</td></tr>'}</tbody></table></div>
+      <div><b style="color:#23305a">حسب التصنيف</b><table style="margin-top:8px"><thead><tr><th>التصنيف</th><th>عدد</th></tr></thead><tbody>${h.byCategory.map(c => `<tr><td>${esc(c.category || '—')}</td><td class="num">${fmt(c.count)}</td></tr>`).join('')}</tbody></table></div>
     </div>
-    <div class="m" style="margin-top:16px;font-size:12.5px">آخر سحب: <b>${esc(when)}</b>${h.lastCrawl?` — بيوت ${fmt(h.lastCrawl.bayut||0)} · عقار ${fmt(h.lastCrawl.aqar||0)}`:''}</div>
+    <div class="m" style="margin-top:16px;font-size:12.5px">آخر سحب: <b>${esc(when)}</b>${h.lastCrawl ? ` — بيوت ${fmt(h.lastCrawl.bayut || 0)} · عقار ${fmt(h.lastCrawl.aqar || 0)}` : ''}</div>
     <style>.metrics .mt{background:#fff;border:1px solid #e2ebec;border-top:2px solid #229799;border-radius:0 0 10px 10px;padding:14px}.metrics b{display:block;font-size:24px;font-weight:800;color:#23305a}.metrics span{font-size:11.5px;color:#5b6b76}</style>`;
   res.send(shell('صحة البيانات', body, req.user));
 }
@@ -376,7 +387,7 @@ export async function crawlCenterPage(req, res) {
 
 // تصدير CSV (مدير)
 export async function exportProperties(req, res) {
-  const csv = await exportPropertiesCsv({ city:req.query.city||null, category:req.query.category||null, district:req.query.district||null });
+  const csv = await exportPropertiesCsv({ city: req.query.city || null, category: req.query.category || null, district: req.query.district || null });
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="properties.csv"');
   res.send(csv);

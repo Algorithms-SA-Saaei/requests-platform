@@ -18,6 +18,12 @@ async function saaeiGet(path, token) {
       signal: controller.signal,
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
     });
+    if (res.status === 401 || res.status === 403) {
+      const ref = await refreshToken();
+      if (ref.ok && ref.token) {
+        return saaeiGet(path, ref.token);
+      }
+    }
     if (!res.ok) return { ok: false, status: res.status };
     const j = await res.json().catch(() => null);
     const arr = Array.isArray(j) ? j : (j?.data || j?.results || j?.items || []);
@@ -119,11 +125,8 @@ async function upsertRequest(doc) {
 
 // ---------- مزامنة تفاضلية ----------
 export async function syncRequests({ force = false, maxPages = 300 } = {}) {
-  // تجديد التوكن يوميًا (أو إن بقي أقل من يومين)
-  const st = await tokenStatus();
-  if (st.set && ((st.daysLeft != null && st.daysLeft < 2) || force || (await stateDue('saaei_refresh', 20)))) {
-    await refreshToken();
-  }
+  // تجديد التوكن عند كل عملية مزامنة وتحديث .env وقاعدة البيانات
+  await refreshToken();
   const token = await getActiveToken();
   if (!token) return { ok: false, reason: 'no_token', added: 0 };
 
@@ -131,14 +134,19 @@ export async function syncRequests({ force = false, maxPages = 300 } = {}) {
   for (; page <= maxPages; page++) {
     const r = await saaeiGet(`/requests?page=${page}&limit=${PAGE}`, token);
     if (!r.ok) return { ok: false, reason: `http_${r.status}`, added };
+    if (!r.arr.length) break;
+
+    const ids = r.arr.map((x) => String(x.id ?? x._id)).filter(Boolean);
+    let knownBefore = 0;
+    if (ids.length && !force) {
+      knownBefore = await ClientRequest.countDocuments({ saaeiId: { $in: ids } });
+    }
+
     for (const raw of r.arr) { await upsertRequest(extractRequest(raw)); added++; }
     if (r.arr.length < PAGE || (r.pageCount && page >= r.pageCount)) break; // آخر صفحة
-    // توقف تفاضلي: إن كانت كل معرّفات الصفحة موجودة مسبقًا فقد بلغنا الطلبات المزامَنة سابقًا
-    const ids = r.arr.map((x) => String(x.id ?? x._id)).filter(Boolean);
-    if (ids.length) {
-      const known = await ClientRequest.countDocuments({ saaeiId: { $in: ids } });
-      if (known >= ids.length) break;
-    }
+
+    // توقف تفاضلي: إن كانت كل معرّفات الصفحة موجودة مسبقًا وليس force، فقد بلغنا الطلبات المزامَنة سابقًا
+    if (!force && ids.length && knownBefore >= ids.length) break;
   }
 
   // وسم «غير مطابَق» من فلتر الخادم — مرة يوميًا فقط (أو force) تخفيفًا لحمل ساعي
@@ -174,5 +182,5 @@ export async function requestCounts() {
 // نصّ الطلب لأغراض السجل/العرض
 export function requestSummary(r) {
   return [r.category, r.beds ? `${r.beds} غرف` : '', r.district || r.city,
-    r.purpose, r.priceMax ? `حتى ${r.priceMax}` : ''].filter(Boolean).join(' · ');
+  r.purpose, r.priceMax ? `حتى ${r.priceMax}` : ''].filter(Boolean).join(' · ');
 }
