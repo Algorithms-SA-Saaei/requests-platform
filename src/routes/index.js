@@ -3,6 +3,7 @@ import { Router } from 'express';
 import * as auth from '../controllers/auth.controller.js';
 import * as requests from '../controllers/requests.controller.js';
 import * as studies from '../controllers/study.controller.js';
+import * as market from '../controllers/market.controller.js';
 import { asyncHandler } from '../middleware/error.middleware.js';
 import { writeLimiter } from '../middleware/rateLimit.middleware.js';
 import { requireAuth, requireRole } from '../middleware/auth.middleware.js';
@@ -26,5 +27,10 @@ router.get('/studies', requireAuth, asyncHandler(studies.list));
 router.post('/studies', requireAuth, writeLimiter, asyncHandler(studies.create));
 router.get('/studies/:id', requireAuth, asyncHandler(studies.analyze));
 router.delete('/studies/:id', requireAuth, requireRole('admin', 'manager'), asyncHandler(studies.remove));
+
+// --- دراسة السوق ---
+router.get('/market/report', requireAuth, asyncHandler(market.report));
+router.get('/market/overview', requireAuth, asyncHandler(market.overview));
+router.get('/market/districts', requireAuth, asyncHandler(market.districts));
 
 export default router;

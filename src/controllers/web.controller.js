@@ -4,6 +4,7 @@ import { ClientRequest } from '../models/ClientRequest.js';
 import { requestCounts, requestSummary, syncRequests } from '../services/saaeiRequests.service.js';
 import { matchesForRequest } from '../services/matching.service.js';
 import { tokenStatus } from '../services/saaeiToken.service.js';
+import { marketReport, districtsWithData } from '../services/market.service.js';
 import { User, verifyPassword } from '../models/User.js';
 import { signToken } from '../middleware/auth.middleware.js';
 import { env } from '../config/environment.js';
@@ -49,7 +50,7 @@ const CSS = `
 
 const shell = (title, body, user) => `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} — طلبات ساعي</title><style>${CSS}</style></head><body>
-<header><div class="b"><img src="https://saaei.co/assets/img/main_logo.svg" alt="ساعي" onerror="this.style.display='none'"><h1>طلبات ساعي</h1></div>
+<header><div class="b"><img src="https://saaei.co/assets/img/main_logo.svg" alt="ساعي" onerror="this.style.display='none'"><h1>طلبات ساعي</h1></div><nav style="display:flex;gap:14px;font-size:13.5px"><a href="/">الطلبات</a><a href="/market">دراسة السوق</a></nav>
 ${user ? `<div><span class="u">${esc(user.name || '')}</span> · <a class="out" href="/logout">خروج</a></div>` : ''}</header>
 <div class="wrap">${body}</div></body></html>`;
 
@@ -160,3 +161,40 @@ export async function requestDetailPage(req, res) {
 }
 
 export async function doSync(_req, res) { await syncRequests({ force: true }); res.redirect('/'); }
+
+// ---------- دراسة السوق ----------
+export async function marketPage(req, res) {
+  const cat = ['شقة', 'دور', 'فيلا', 'تاون هاوس', 'أرض'].includes(req.query.category) ? req.query.category : 'شقة';
+  const district = req.query.district || '';
+  const [dists, rep] = await Promise.all([
+    districtsWithData(cat),
+    district ? marketReport(district, cat) : null,
+  ]);
+  const stripHay = (x) => String(x || '').replace(/^حي\s+/, '');
+  const catOpts = ['شقة', 'دور', 'فيلا', 'تاون هاوس', 'أرض'].map((x) => `<option ${x === cat ? 'selected' : ''}>${x}</option>`).join('');
+  const dopts = dists.map((x) => `<div class="dopt" data-v="${esc(stripHay(x.district))}">${esc(stripHay(x.district))}${x.city && x.city !== 'الرياض' ? ' · ' + esc(x.city) : ''} <span class="dn">${x.count}</span></div>`).join('');
+  const kpi = (v, l) => `<div class="mt"><b>${v == null ? '—' : fmt(v)}</b><span>${l}</span></div>`;
+  const body = rep && rep.count ? `
+    <div class="metrics">
+      ${kpi(rep.ppmMedian, 'وسيط سعر المتر')}
+      ${kpi(rep.count, 'عدد العيّنة')}
+      ${kpi(rep.ppmMin, 'أدنى سعر متر')}
+      ${kpi(rep.ppmMax, 'أعلى سعر متر')}
+    </div>
+    <div class="bar"><b style="color:#23305a">عيّنة من السوق</b> <span class="m">أعلى ${rep.sample.length}</span></div>
+    <table><thead><tr><th>الحي</th><th>المساحة</th><th>السعر</th><th>ر/م²</th><th>المصدر</th><th></th></tr></thead><tbody>${
+      rep.sample.map((u) => `<tr><td>${esc(stripHay(u.district))}</td><td class="num">${fmt(u.area)}م²</td><td class="num">${fmt(u.price)}</td><td class="num" style="color:#229799;font-weight:800">${fmt(u.pricePerM)}</td><td class="m">${esc(u.source)}</td><td>${u.url ? `<a href="${esc(u.url)}" target="_blank">المصدر ↗</a>` : ''}</td></tr>`).join('')
+    }</tbody></table>` : (district ? '<div class="m" style="background:#fff;border:1px dashed #cdd8da;border-radius:12px;padding:22px;text-align:center">لا بيانات كافية لهذا الحي — شغّل سحب السوق أولًا.</div>' : '<div class="m" style="background:#fff;border:1px dashed #cdd8da;border-radius:12px;padding:22px;text-align:center">اختر التصنيف وابحث عن حي لعرض دراسته.</div>');
+  res.send(shell('دراسة السوق', `
+    <form class="mform" method="GET" action="/market" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
+      <select name="category" onchange="document.getElementById('mdval').value='';document.getElementById('mdq').value='';this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit">${catOpts}</select>
+      <div class="combo" style="position:relative;flex:1;min-width:220px">
+        <input type="text" id="mdq" autocomplete="off" placeholder="ابحث واختر الحي… (${dists.length})" value="${esc(stripHay(district))}" style="width:100%;padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit;box-sizing:border-box">
+        <input type="hidden" name="district" id="mdval" value="${esc(stripHay(district))}">
+        <div class="dopts" id="mdopts">${dopts}</div>
+      </div>
+    </form>
+    <script>(function(){var q=document.getElementById('mdq'),box=document.getElementById('mdopts'),val=document.getElementById('mdval');if(!q)return;var items=[].slice.call(box.querySelectorAll('.dopt'));function fil(){var t=q.value.trim();box.style.display='block';items.forEach(function(it){it.style.display=(!t||it.textContent.indexOf(t)!==-1)?'':'none';});}q.addEventListener('focus',fil);q.addEventListener('input',function(){val.value='';fil();});items.forEach(function(it){it.addEventListener('mousedown',function(e){e.preventDefault();val.value=it.getAttribute('data-v');q.value=it.textContent.replace(/\s*\d+\s*$/,'').trim();box.style.display='none';q.form.submit();});});document.addEventListener('click',function(e){if(!e.target.closest('.combo'))box.style.display='none';});})();</script>
+    <style>.dopts{display:none;position:absolute;top:calc(100% + 4px);right:0;left:0;max-height:300px;overflow:auto;background:#fff;border:1px solid #d3e0e2;border-radius:12px;box-shadow:0 8px 28px -12px rgba(20,40,60,.3);z-index:50}.dopt{padding:10px 14px;cursor:pointer;font-size:14px;display:flex;justify-content:space-between;border-bottom:1px solid #f0f4f5}.dopt:hover{background:#eef4f5}.dopt .dn{color:#6b7a84;font-size:12px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}.metrics .mt{background:#fff;border:1px solid #e2ebec;border-top:2px solid #229799;border-radius:0 0 10px 10px;padding:14px 16px}.metrics .mt b{display:block;font-size:26px;font-weight:800;color:#23305a}.metrics .mt span{font-size:11.5px;color:#5b6b76}.num{font-variant-numeric:tabular-nums}</style>
+    ${body}`, req.user));
+}

@@ -75,6 +75,15 @@ node scripts/crawl-market.js --sources bayut # مصدر محدد
 | `GET /api/studies` · `GET /api/studies/:id` | القائمة · التحليل الكامل |
 `src/models/Study.js` + `src/services/study.service.js`.
 
+## دراسة السوق (تقارير الأحياء)
+تقارير من مخزون `Property` (سحب بيوت+عقار): وسيط سعر المتر بالحي/التصنيف + النظرة العامة.
+| المسار | الوصف |
+|---|---|
+| `GET /market` (ويب) | صفحة دراسة السوق: بحث الأحياء + التقرير |
+| `GET /api/market/report?district=&category=` | تقرير حي (وسيط/مدى/عيّنة) |
+| `GET /api/market/overview` · `GET /api/market/districts` | نظرة عامة · قائمة الأحياء |
+`src/services/market.service.js`.
+
 ## البنية
 ```
 server.js · src/app.js

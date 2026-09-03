@@ -11,5 +11,6 @@ router.post('/login', writeLimiter, asyncHandler(web.doLogin));
 router.get('/logout', web.doLogout);
 router.get('/', requireAuthWeb, asyncHandler(web.dashboard));
 router.get('/r/:id', requireAuthWeb, asyncHandler(web.requestDetailPage));
+router.get('/market', requireAuthWeb, asyncHandler(web.marketPage));
 router.post('/sync', requireAuthWeb, requireRole('admin', 'manager'), writeLimiter, asyncHandler(web.doSync));
 export default router;
