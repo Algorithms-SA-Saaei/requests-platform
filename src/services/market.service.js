@@ -202,3 +202,58 @@ export async function exportPropertiesCsv({ city, category, district } = {}) {
   for (const r of rows) lines.push([r.source, r.category, stripHay(r.district), r.city, r.beds, r.area, r.price, r.pricePerM, r.saleType === 'ready' ? 'جاهز' : r.saleType === 'offplan' ? 'خارطة' : '', r.projectName, r.url].map(esc).join(','));
   return '﻿' + lines.join('\n');
 }
+
+
+/** يلتقط لقطة يومية: وسيط سعر المتر وعدد الوحدات لكل (حي، تصنيف). idempotent باليوم. */
+export async function snapshotMarket({ city } = {}) {
+  const { Snapshot } = await import('../models/Snapshot.js');
+  const q = { active: true, pricePerM: { $ne: null }, area: { $gte: 100 } };
+  if (city) q.city = city;
+  const rows = await Property.find(q).select('district category city pricePerM price').limit(50000).lean();
+  const g = new Map();
+  for (const r of rows) {
+    const d = stripHay(r.district), c = r.category;
+    if (!d || !c) continue;
+    const key = d + ' ' + c;
+    if (!g.has(key)) g.set(key, { district: d, category: c, city: r.city, ppms: [], prices: [] });
+    const o = g.get(key);
+    if (Number.isFinite(r.pricePerM)) o.ppms.push(r.pricePerM);
+    if (Number.isFinite(r.price)) o.prices.push(r.price);
+  }
+  const now = new Date();
+  const day = now.toISOString().slice(0, 10);
+  const ops = [...g.values()]
+    .filter((o) => o.ppms.length)
+    .map((o) => ({
+      updateOne: {
+        filter: { day, district: o.district, category: o.category },
+        update: { $set: { day, at: now, district: o.district, category: o.category, city: o.city, ppmMedian: median(o.ppms), priceMedian: median(o.prices), count: o.ppms.length } },
+        upsert: true,
+      },
+    }));
+  if (ops.length) await Snapshot.bulkWrite(ops, { ordered: false });
+  return { day, groups: ops.length };
+}
+
+/** سلسلة زمنية لسعر متر حي/تصنيف (من اللقطات) */
+export async function trendSeries(district, category, { city, days = 180 } = {}) {
+  const { Snapshot } = await import('../models/Snapshot.js');
+  const q = {};
+  if (district) q.district = stripHay(district);
+  if (category) q.category = category;
+  if (city) q.city = city;
+  const rows = await Snapshot.find(q).select('day ppmMedian priceMedian count').sort({ day: 1 }).limit(days).lean();
+  return rows.map((r) => ({ day: r.day, ppm: r.ppmMedian, price: r.priceMedian, count: r.count }));
+}
+
+/** ازواج (حي، تصنيف) التي لها لقطتان فاكثر — صالحة لعرض اتجاه */
+export async function trendPairs() {
+  const { Snapshot } = await import('../models/Snapshot.js');
+  const agg = await Snapshot.aggregate([
+    { $group: { _id: { district: '$district', category: '$category' }, snaps: { $sum: 1 } } },
+    { $match: { snaps: { $gte: 2 } } },
+    { $sort: { snaps: -1 } },
+    { $limit: 300 },
+  ]);
+  return agg.map((a) => ({ district: a._id.district, category: a._id.category, snaps: a.snaps }));
+}

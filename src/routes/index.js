@@ -40,5 +40,8 @@ router.get('/market/nearby', requireAuth, asyncHandler(market.nearby));
 router.get('/market/map', requireAuth, asyncHandler(market.mapData));
 router.get('/market/projects', requireAuth, asyncHandler(market.projects));
 router.get('/market/health', requireAuth, requireRole('admin', 'manager'), asyncHandler(market.health));
+router.get('/market/trends', requireAuth, asyncHandler(market.trends));
+router.get('/market/trend-list', requireAuth, asyncHandler(market.trendList));
+router.post('/market/snapshot', requireAuth, requireRole('admin', 'manager'), writeLimiter, asyncHandler(market.snapshot));
 
 export default router;

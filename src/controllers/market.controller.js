@@ -1,5 +1,5 @@
 // دراسة السوق — API: تقرير حي، نظرة عامة، قائمة الأحياء.
-import { marketReport, marketOverview, districtsWithData, compareDistricts, priceUnit, saleSplit, nearbyProperties, mapProperties, projectsList, dataHealth } from '../services/market.service.js';
+import { marketReport, marketOverview, districtsWithData, compareDistricts, priceUnit, saleSplit, nearbyProperties, mapProperties, projectsList, dataHealth, trendSeries, trendPairs, snapshotMarket } from '../services/market.service.js';
 import { demandGaps } from '../services/demand.service.js';
 import { ok } from '../utils/response.js';
 
@@ -17,3 +17,6 @@ export const nearby = async (req, res) => ok(res, await nearbyProperties(req.que
 export const mapData = async (req, res) => ok(res, await mapProperties(req.query.district || null, req.query.category || null));
 export const projects = async (req, res) => ok(res, await projectsList({ category: req.query.category || null, saleType: req.query.saleType || null, city: req.query.city || null }));
 export const health = async (_req, res) => ok(res, await dataHealth());
+export const trends = async (req, res) => ok(res, await trendSeries(req.query.district || null, req.query.category || null, { city: req.query.city || null }));
+export const trendList = async (_req, res) => ok(res, await trendPairs());
+export const snapshot = async (req, res) => ok(res, await snapshotMarket({ city: req.body?.city || null }));

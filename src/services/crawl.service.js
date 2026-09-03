@@ -35,5 +35,13 @@ export async function crawlMarket({ sources = ['bayut', 'aqar'], city = 'الر�
   }
   const total = await Property.countDocuments({ active: true });
   await stateSet('last_crawl', { at: new Date().toISOString(), sources, ...summary });
+  // لقطة اتجاه زمني: تتراكم مع كل سحب لتُبنى منها السلاسل لاحقًا (فشلها لا يُفشل السحب)
+  try {
+    const { snapshotMarket } = await import('./market.service.js');
+    const snap = await snapshotMarket({ city });
+    logger.info('crawl-snapshot', snap);
+  } catch (e) {
+    logger.error('crawl-snapshot-failed', { error: e?.message });
+  }
   return { ...summary, totalActive: total };
 }

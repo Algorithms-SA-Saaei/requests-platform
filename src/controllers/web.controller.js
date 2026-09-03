@@ -6,7 +6,7 @@ import { matchesForRequest } from '../services/matching.service.js';
 import { tokenStatus } from '../services/saaeiToken.service.js';
 import { marketReport, districtsWithData, compareDistricts, priceUnit, saleSplit } from '../services/market.service.js';
 import { demandGaps } from '../services/demand.service.js';
-import { nearbyProperties, mapProperties, marketOverview, projectsList, dataHealth, exportPropertiesCsv } from '../services/market.service.js';
+import { nearbyProperties, mapProperties, marketOverview, projectsList, dataHealth, exportPropertiesCsv, trendSeries, trendPairs } from '../services/market.service.js';
 import { User, verifyPassword } from '../models/User.js';
 import { signToken } from '../middleware/auth.middleware.js';
 import { env } from '../config/environment.js';
@@ -52,7 +52,7 @@ const CSS = `
 
 const shell = (title, body, user, extraHead = '') => `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} — طلبات ساعي</title>${extraHead}<style>${CSS}</style></head><body>
-<header><div class="b"><img src="https://saaei.co/assets/img/main_logo.svg" alt="ساعي" onerror="this.style.display='none'"><h1>طلبات ساعي</h1></div><nav style="display:flex;gap:14px;font-size:13.5px;flex-wrap:wrap"><a href="/">الطلبات</a><a href="/market">دراسة السوق</a><a href="/compare">مقارنة</a><a href="/pricing">تسعير</a><a href="/sale-split">جاهز/خارطة</a><a href="/projects">المشاريع</a><a href="/demands">فجوات</a><a href="/map">الخريطة</a><a href="/nearby">قرب موقع</a><a href="/analytics">تحليلات</a>${user && (user.role === 'admin' || user.role === 'manager') ? '<a href="/health">الصحة</a><a href="/crawl-center">السحب</a><a href="/export/properties.csv">تصدير</a>' : ''}</nav>
+<header><div class="b"><img src="https://saaei.co/assets/img/main_logo.svg" alt="ساعي" onerror="this.style.display='none'"><h1>طلبات ساعي</h1></div><nav style="display:flex;gap:14px;font-size:13.5px;flex-wrap:wrap"><a href="/">الطلبات</a><a href="/market">دراسة السوق</a><a href="/compare">مقارنة</a><a href="/pricing">تسعير</a><a href="/sale-split">جاهز/خارطة</a><a href="/projects">المشاريع</a><a href="/demands">فجوات</a><a href="/map">الخريطة</a><a href="/nearby">قرب موقع</a><a href="/analytics">تحليلات</a><a href="/trends">الاتجاه</a>${user && (user.role === 'admin' || user.role === 'manager') ? '<a href="/health">الصحة</a><a href="/crawl-center">السحب</a><a href="/export/properties.csv">تصدير</a>' : ''}</nav>
 ${user ? `<div><span class="u">${esc(user.name || '')}</span> · <a class="out" href="/logout">خروج</a></div>` : ''}</header>
 <div class="wrap">${body}</div></body></html>`;
 
@@ -379,4 +379,53 @@ export async function exportProperties(req, res) {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="properties.csv"');
   res.send(csv);
+}
+
+// الاتجاه الزمني — رسم خطي لسعر المتر عبر اللقطات
+export async function trendsPage(req, res) {
+  const pairs = await trendPairs();
+  const cat = req.query.category || (pairs[0] && pairs[0].category) || 'شقة';
+  const district = req.query.district || (pairs.find((p) => p.category === cat) || pairs[0] || {}).district || '';
+  const series = district ? await trendSeries(district, cat) : [];
+  const opts = pairs.map((p) => `<option value="${esc(p.district)}|${esc(p.category)}" ${p.district === district && p.category === cat ? 'selected' : ''}>${esc(p.district)} — ${esc(p.category)} (${p.snaps} لقطة)</option>`).join('');
+  let chart;
+  if (series.length < 2) {
+    chart = `<div class="card" style="background:#fff;border:1px solid #e2ebec;border-radius:14px;padding:26px;text-align:center;color:#6b7a84">
+      لا سلسلة كافية بعد. تُلتقط لقطة تلقائيًا مع كل سحب سوق، ويظهر الخط بعد لقطتين على الأقل.
+      <div style="margin-top:12px"><a class="btn" href="/crawl-center">اذهب لمركز السحب</a></div></div>`;
+  } else {
+    const W = 900, H = 320, P = 46;
+    const ppms = series.map((s) => s.ppm).filter(Number.isFinite);
+    const min = Math.min(...ppms), max = Math.max(...ppms);
+    const span = max - min || 1;
+    const x = (i) => P + (i * (W - 2 * P)) / (series.length - 1);
+    const y = (v) => H - P - ((v - min) / span) * (H - 2 * P);
+    const pts = series.map((s, i) => `${x(i).toFixed(1)},${y(s.ppm).toFixed(1)}`).join(' ');
+    const area = `${P},${H - P} ${pts} ${x(series.length - 1).toFixed(1)},${H - P}`;
+    const dots = series.map((s, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(s.ppm).toFixed(1)}" r="3.5" fill="#229799"><title>${esc(s.day)} · ${fmt(s.ppm)} ر/م² · ${s.count} وحدة</title></circle>`).join('');
+    const gy = [0, 0.25, 0.5, 0.75, 1].map((t) => { const v = min + t * span; const yy = y(v).toFixed(1); return `<line x1="${P}" y1="${yy}" x2="${W - P}" y2="${yy}" stroke="#eef2f3"/><text x="${P - 8}" y="${(+yy + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="#9aa7b0">${fmt(v)}</text>`; }).join('');
+    const step = Math.max(1, Math.ceil(series.length / 8));
+    const gx = series.map((s, i) => (i % step === 0 || i === series.length - 1) ? `<text x="${x(i).toFixed(1)}" y="${H - P + 18}" text-anchor="middle" font-size="10.5" fill="#9aa7b0">${esc(s.day.slice(5))}</text>` : '').join('');
+    const first = series[0].ppm, last = series[series.length - 1].ppm;
+    const dPct = first ? Math.round(((last - first) / first) * 100) : 0;
+    const dCol = dPct > 0 ? '#c0392b' : dPct < 0 ? '#1a9850' : '#6b7a84';
+    chart = `<div style="display:flex;gap:14px;margin-bottom:12px;flex-wrap:wrap">
+        <div class="mt2"><b>${fmt(last)}</b><span>وسيط ر/م² الآن</span></div>
+        <div class="mt2"><b style="color:${dCol}">${dPct > 0 ? '+' : ''}${dPct}%</b><span>منذ أول لقطة</span></div>
+        <div class="mt2"><b>${series.length}</b><span>لقطات</span></div>
+      </div>
+      <div style="background:#fff;border:1px solid #e2ebec;border-radius:14px;padding:12px;overflow-x:auto">
+        <svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:640px" font-family="Tajawal,sans-serif">
+          <defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#22979933"/><stop offset="1" stop-color="#22979900"/></linearGradient></defs>
+          ${gy}
+          <polygon points="${area}" fill="url(#g)"/>
+          <polyline points="${pts}" fill="none" stroke="#229799" stroke-width="2.5" stroke-linejoin="round"/>
+          ${dots}${gx}
+        </svg></div>
+      <style>.mt2{background:#fff;border:1px solid #e2ebec;border-top:2px solid #229799;border-radius:0 0 10px 10px;padding:12px 16px}.mt2 b{display:block;font-size:22px;font-weight:800;color:#23305a}.mt2 span{font-size:11.5px;color:#5b6b76}</style>`;
+  }
+  const selector = pairs.length
+    ? `<form method="GET" action="/trends" style="margin-bottom:14px"><select name="_pair" onchange="var v=this.value.split('|');this.form.district.value=v[0];this.form.category.value=v[1];this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit;min-width:280px">${opts}</select><input type="hidden" name="district" value="${esc(district)}"><input type="hidden" name="category" value="${esc(cat)}"></form>`
+    : '';
+  res.send(shell('الاتجاه الزمني', selector + chart, req.user));
 }
