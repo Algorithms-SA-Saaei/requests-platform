@@ -43,5 +43,8 @@ router.get('/market/health', requireAuth, requireRole('admin', 'manager'), async
 router.get('/market/trends', requireAuth, asyncHandler(market.trends));
 router.get('/market/trend-list', requireAuth, asyncHandler(market.trendList));
 router.post('/market/snapshot', requireAuth, requireRole('admin', 'manager'), writeLimiter, asyncHandler(market.snapshot));
+router.get('/market/calibration', requireAuth, requireRole('admin', 'manager'), asyncHandler(market.calibration));
+router.post('/market/area-code', requireAuth, requireRole('admin', 'manager'), writeLimiter, asyncHandler(market.areaCodeAdd));
+router.delete('/market/area-code', requireAuth, requireRole('admin', 'manager'), writeLimiter, asyncHandler(market.areaCodeRemove));
 
 export default router;

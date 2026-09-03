@@ -6,6 +6,7 @@ import { matchesForRequest } from '../services/matching.service.js';
 import { tokenStatus } from '../services/saaeiToken.service.js';
 import { marketReport, districtsWithData, compareDistricts, priceUnit, saleSplit } from '../services/market.service.js';
 import { demandGaps } from '../services/demand.service.js';
+import { calibrationReport } from '../services/calibration.service.js';
 import { nearbyProperties, mapProperties, marketOverview, projectsList, dataHealth, exportPropertiesCsv, trendSeries, trendPairs } from '../services/market.service.js';
 import { User, verifyPassword } from '../models/User.js';
 import { signToken } from '../middleware/auth.middleware.js';
@@ -52,7 +53,7 @@ const CSS = `
 
 const shell = (title, body, user, extraHead = '') => `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} — طلبات ساعي</title>${extraHead}<style>${CSS}</style></head><body>
-<header><div class="b"><img src="https://saaei.co/assets/img/main_logo.svg" alt="ساعي" onerror="this.style.display='none'"><h1>طلبات ساعي</h1></div><nav style="display:flex;gap:14px;font-size:13.5px;flex-wrap:wrap"><a href="/">الطلبات</a><a href="/market">دراسة السوق</a><a href="/compare">مقارنة</a><a href="/pricing">تسعير</a><a href="/sale-split">جاهز/خارطة</a><a href="/projects">المشاريع</a><a href="/demands">فجوات</a><a href="/map">الخريطة</a><a href="/nearby">قرب موقع</a><a href="/analytics">تحليلات</a><a href="/trends">الاتجاه</a>${user && (user.role === 'admin' || user.role === 'manager') ? '<a href="/health">الصحة</a><a href="/crawl-center">السحب</a><a href="/export/properties.csv">تصدير</a>' : ''}</nav>
+<header><div class="b"><img src="https://saaei.co/assets/img/main_logo.svg" alt="ساعي" onerror="this.style.display='none'"><h1>طلبات ساعي</h1></div><nav style="display:flex;gap:14px;font-size:13.5px;flex-wrap:wrap"><a href="/">الطلبات</a><a href="/market">دراسة السوق</a><a href="/compare">مقارنة</a><a href="/pricing">تسعير</a><a href="/sale-split">جاهز/خارطة</a><a href="/projects">المشاريع</a><a href="/demands">فجوات</a><a href="/map">الخريطة</a><a href="/nearby">قرب موقع</a><a href="/analytics">تحليلات</a><a href="/trends">الاتجاه</a>${user && (user.role === 'admin' || user.role === 'manager') ? '<a href="/calibration">المعايرة</a><a href="/health">الصحة</a><a href="/crawl-center">السحب</a><a href="/export/properties.csv">تصدير</a>' : ''}</nav>
 ${user ? `<div><span class="u">${esc(user.name || '')}</span> · <a class="out" href="/logout">خروج</a></div>` : ''}</header>
 <div class="wrap">${body}</div></body></html>`;
 
@@ -428,4 +429,56 @@ export async function trendsPage(req, res) {
     ? `<form method="GET" action="/trends" style="margin-bottom:14px"><select name="_pair" onchange="var v=this.value.split('|');this.form.district.value=v[0];this.form.category.value=v[1];this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit;min-width:280px">${opts}</select><input type="hidden" name="district" value="${esc(district)}"><input type="hidden" name="category" value="${esc(cat)}"></form>`
     : '';
   res.send(shell('الاتجاه الزمني', selector + chart, req.user));
+}
+
+// المعايرة — عرضنا مقابل صفقات البورصة العقارية (مدير)
+export async function calibrationPage(req, res) {
+  const rep = await calibrationReport({ city: req.query.city || null });
+  const gapCell = (g) => {
+    if (g == null) return '<span class="m">—</span>';
+    const col = g > 8 ? '#c0392b' : g < -8 ? '#1a9850' : '#b8860b';
+    return `<b style="color:${col}">${g > 0 ? '+' : ''}${g}%</b>`;
+  };
+  const rows = rep.calibrated.map((c) => `<tr>
+      <td><b>${esc(c.district)}</b> <span class="m" style="font-size:11px">${esc(c.areaType)}·${c.areaSerial}</span></td>
+      <td class="num">${fmt(c.askingMedian)} <span class="m" style="font-size:11px">(${fmt(c.askingCount)})</span></td>
+      <td class="num">${c.ok ? fmt(c.actualAverage) : '<span class="m">تعذّر الجلب</span>'}</td>
+      <td class="num">${gapCell(c.gapPct)}</td>
+      <td class="num m">${fmt(c.deals)}</td>
+      <td><button class="lnk" onclick="delc('${esc(c.district)}')" title="حذف الرمز">حذف</button></td>
+    </tr>`).join('');
+  const needs = rep.needsCode.map((d) => `<span class="chip" style="cursor:pointer" onclick="pre('${esc(d.district)}')">${esc(d.district)} <span class="m">(${fmt(d.count)})</span></span>`).join('');
+  const body = `
+    <div class="m" style="font-size:12.5px;margin-bottom:14px;line-height:1.7">صفقات مسجّلة من البورصة العقارية (وزارة العدل) مقابل وسيط أسعار العرض عندنا. الفارق الموجب: عرضنا فوق سعر الصفقات؛ السالب: تحته. رمز الحي يُلتقط بدخول النفاذ الوطني من <span style="direction:ltr;display:inline-block">SearchAddress</span> ثم يُدخَل هنا.</div>
+    ${rep.calibrated.length ? `<table><thead><tr><th>الحي</th><th>عرضنا ر/م² (عدد)</th><th>صفقات البورصة</th><th>الفارق</th><th>صفقات</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="card" style="background:#fff;border:1px solid #e2ebec;border-radius:14px;padding:22px;color:#6b7a84">لا أحياء معايَرة بعد. أضف رمز حيّ لتبدأ المقارنة.</div>'}
+
+    <div style="background:#fff;border:1px solid #e2ebec;border-radius:14px;padding:18px;margin-top:18px;max-width:640px">
+      <b style="color:#23305a">أضف رمز حيّ</b>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">
+        <input id="c_d" placeholder="اسم الحي" style="padding:11px;border-radius:10px;border:1px solid #d3e0e2;font-family:inherit;min-width:150px">
+        <input id="c_s" placeholder="رمز البورصة" inputmode="numeric" style="padding:11px;border-radius:10px;border:1px solid #d3e0e2;font-family:inherit;width:130px">
+        <select id="c_t" style="padding:11px;border-radius:10px;border:1px solid #d3e0e2;font-family:inherit"><option value="R">سكني R</option><option value="D">حي D</option><option value="C">تجاري C</option></select>
+        <button class="btn" onclick="addc()">إضافة</button>
+      </div>
+      <div id="c_out" class="m" style="font-size:12.5px;margin-top:10px"></div>
+    </div>
+
+    ${needs ? `<div style="margin-top:18px"><b style="color:#23305a">أحياء لدينا بيانات عرض عنها بلا رمز بورصة</b><div class="m" style="font-size:12px;margin:4px 0 8px">اضغط الحي لتعبئة اسمه في النموذج أعلاه.</div><div>${needs}</div></div>` : ''}
+
+    <style>.lnk{background:none;border:0;color:#b23a48;font-weight:700;cursor:pointer;font-family:inherit;font-size:12.5px}</style>
+    <script>
+      function pre(d){document.getElementById('c_d').value=d;document.getElementById('c_s').focus();window.scrollTo({top:0});}
+      async function addc(){
+        var d=document.getElementById('c_d').value.trim(), s=document.getElementById('c_s').value.trim(), t=document.getElementById('c_t').value;
+        if(!d||!s){document.getElementById('c_out').textContent='الحي والرمز مطلوبان.';return;}
+        document.getElementById('c_out').textContent='… يضيف';
+        try{var r=await fetch('/api/market/area-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({district:d,areaSerial:s,areaType:t})});
+          var j=await r.json(); if(j.ok!==false){location.reload();} else document.getElementById('c_out').textContent='فشل: '+(j.error||'');}
+        catch(e){document.getElementById('c_out').textContent='خطأ: '+e.message;}
+      }
+      async function delc(d){ if(!confirm('حذف رمز '+d+'؟'))return;
+        await fetch('/api/market/area-code?district='+encodeURIComponent(d),{method:'DELETE'}); location.reload();
+      }
+    </script>`;
+  res.send(shell('المعايرة', body, req.user));
 }

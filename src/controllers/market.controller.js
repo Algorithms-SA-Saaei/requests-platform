@@ -1,6 +1,7 @@
 // دراسة السوق — API: تقرير حي، نظرة عامة، قائمة الأحياء.
 import { marketReport, marketOverview, districtsWithData, compareDistricts, priceUnit, saleSplit, nearbyProperties, mapProperties, projectsList, dataHealth, trendSeries, trendPairs, snapshotMarket } from '../services/market.service.js';
 import { demandGaps } from '../services/demand.service.js';
+import { calibrationReport, addAreaCode, removeAreaCode } from '../services/calibration.service.js';
 import { ok } from '../utils/response.js';
 
 export const report = async (req, res) => {
@@ -20,3 +21,6 @@ export const health = async (_req, res) => ok(res, await dataHealth());
 export const trends = async (req, res) => ok(res, await trendSeries(req.query.district || null, req.query.category || null, { city: req.query.city || null }));
 export const trendList = async (_req, res) => ok(res, await trendPairs());
 export const snapshot = async (req, res) => ok(res, await snapshotMarket({ city: req.body?.city || null }));
+export const calibration = async (req, res) => ok(res, await calibrationReport({ city: req.query.city || null }));
+export const areaCodeAdd = async (req, res) => ok(res, await addAreaCode(req.body || {}));
+export const areaCodeRemove = async (req, res) => ok(res, await removeAreaCode(req.query.district, req.query.city));

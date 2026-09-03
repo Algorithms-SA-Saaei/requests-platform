@@ -21,6 +21,7 @@ router.get('/nearby', requireAuthWeb, asyncHandler(web.nearbyPage));
 router.get('/analytics', requireAuthWeb, asyncHandler(web.analyticsPage));
 router.get('/projects', requireAuthWeb, asyncHandler(web.projectsPage));
 router.get('/trends', requireAuthWeb, asyncHandler(web.trendsPage));
+router.get('/calibration', requireAuthWeb, requireRole('admin', 'manager'), asyncHandler(web.calibrationPage));
 router.get('/health', requireAuthWeb, requireRole('admin', 'manager'), asyncHandler(web.healthPage));
 router.get('/crawl-center', requireAuthWeb, requireRole('admin', 'manager'), asyncHandler(web.crawlCenterPage));
 router.get('/export/properties.csv', requireAuthWeb, requireRole('admin', 'manager'), asyncHandler(web.exportProperties));
