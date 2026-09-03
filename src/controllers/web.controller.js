@@ -6,7 +6,7 @@ import { matchesForRequest } from '../services/matching.service.js';
 import { tokenStatus } from '../services/saaeiToken.service.js';
 import { marketReport, districtsWithData, compareDistricts, priceUnit, saleSplit } from '../services/market.service.js';
 import { demandGaps } from '../services/demand.service.js';
-import { nearbyProperties, mapProperties, marketOverview } from '../services/market.service.js';
+import { nearbyProperties, mapProperties, marketOverview, projectsList, dataHealth, exportPropertiesCsv } from '../services/market.service.js';
 import { User, verifyPassword } from '../models/User.js';
 import { signToken } from '../middleware/auth.middleware.js';
 import { env } from '../config/environment.js';
@@ -52,7 +52,7 @@ const CSS = `
 
 const shell = (title, body, user, extraHead = '') => `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} — طلبات ساعي</title>${extraHead}<style>${CSS}</style></head><body>
-<header><div class="b"><img src="https://saaei.co/assets/img/main_logo.svg" alt="ساعي" onerror="this.style.display='none'"><h1>طلبات ساعي</h1></div><nav style="display:flex;gap:14px;font-size:13.5px"><a href="/">الطلبات</a><a href="/market">دراسة السوق</a><a href="/compare">مقارنة</a><a href="/pricing">تسعير</a><a href="/sale-split">جاهز/خارطة</a><a href="/demands">فجوات</a><a href="/map">الخريطة</a><a href="/nearby">قرب موقع</a><a href="/analytics">تحليلات</a></nav>
+<header><div class="b"><img src="https://saaei.co/assets/img/main_logo.svg" alt="ساعي" onerror="this.style.display='none'"><h1>طلبات ساعي</h1></div><nav style="display:flex;gap:14px;font-size:13.5px;flex-wrap:wrap"><a href="/">الطلبات</a><a href="/market">دراسة السوق</a><a href="/compare">مقارنة</a><a href="/pricing">تسعير</a><a href="/sale-split">جاهز/خارطة</a><a href="/projects">المشاريع</a><a href="/demands">فجوات</a><a href="/map">الخريطة</a><a href="/nearby">قرب موقع</a><a href="/analytics">تحليلات</a>${user && (user.role === 'admin' || user.role === 'manager') ? '<a href="/health">الصحة</a><a href="/crawl-center">السحب</a><a href="/export/properties.csv">تصدير</a>' : ''}</nav>
 ${user ? `<div><span class="u">${esc(user.name || '')}</span> · <a class="out" href="/logout">خروج</a></div>` : ''}</header>
 <div class="wrap">${body}</div></body></html>`;
 
@@ -302,4 +302,81 @@ export async function analyticsPage(req, res) {
     </div>
     <style>.metrics .mt{background:#fff;border:1px solid #e2ebec;border-top:2px solid #229799;border-radius:0 0 10px 10px;padding:14px}.metrics b{display:block;font-size:24px;font-weight:800;color:#23305a}.metrics span{font-size:11.5px;color:#5b6b76}</style>`;
   res.send(shell('التحليلات', body, req.user));
+}
+
+const CATS = ['شقة','دور','فيلا','تاون هاوس','أرض'];
+const catOpts = (sel) => ['<option value="">كل الأنواع</option>'].concat(CATS.map(c=>`<option ${c===sel?'selected':''}>${c}</option>`)).join('');
+
+// المشاريع/المجمّعات
+export async function projectsPage(req, res) {
+  const cat = CATS.includes(req.query.category)?req.query.category:'';
+  const st = ['ready','offplan'].includes(req.query.saleType)?req.query.saleType:'';
+  const rows = await projectsList({ category:cat||null, saleType:st||null });
+  const list = rows.map(p=>`<tr><td><b>${esc(p.project)}</b></td><td class="m">${esc(p.districts.slice(0,2).join('، '))}${p.districts.length>2?' +'+(p.districts.length-2):''}</td><td class="m">${esc(p.categories.join('، '))}</td><td class="num">${fmt(p.count)}</td><td class="num" style="color:#229799;font-weight:800">${fmt(p.ppmMedian)}</td><td class="num m">${p.ready?'جاهز '+p.ready:''}${p.ready&&p.offplan?' · ':''}${p.offplan?'خارطة '+p.offplan:''}</td></tr>`).join('');
+  const body = `<form method="GET" action="/projects" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <select name="category" onchange="this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit">${catOpts(cat)}</select>
+      <select name="saleType" onchange="this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit"><option value="">جاهز + خارطة</option><option value="ready" ${st==='ready'?'selected':''}>جاهز فقط</option><option value="offplan" ${st==='offplan'?'selected':''}>خارطة فقط</option></select></form>
+    <div class="m" style="font-size:12px;margin-bottom:8px">${rows.length} مشروع/مجمّع بالمخزون</div>
+    <table><thead><tr><th>المشروع</th><th>الأحياء</th><th>الأنواع</th><th>وحدات</th><th>وسيط ر/م²</th><th>النوع</th></tr></thead><tbody>${list||'<tr><td colspan="6" class="m" style="text-align:center;padding:20px">لا مشاريع مسمّاة بعد — تظهر بعد سحب فيه أسماء مشاريع.</td></tr>'}</tbody></table>`;
+  res.send(shell('المشاريع', body, req.user));
+}
+
+// صحة البيانات (مدير)
+export async function healthPage(req, res) {
+  const h = await dataHealth();
+  const when = h.lastCrawl?.at ? new Date(h.lastCrawl.at).toLocaleString('ar-SA') : '—';
+  const body = `<div class="metrics" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">
+      <div class="mt"><b>${fmt(h.active)}</b><span>عقارات فعّالة</span></div>
+      <div class="mt"><b>${fmt(h.districts)}</b><span>أحياء مغطّاة</span></div>
+      <div class="mt"><b>${fmt(h.missing.noGeo)}</b><span>بلا إحداثيات</span></div>
+      <div class="mt"><b>${fmt(h.missing.noPrice)}</b><span>بلا سعر</span></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div><b style="color:#23305a">حسب المصدر</b><table style="margin-top:8px"><thead><tr><th>المصدر</th><th>عدد</th><th>آخر تحديث</th></tr></thead><tbody>${h.bySource.map(s=>`<tr><td>${esc(s.source)}</td><td class="num">${fmt(s.count)}</td><td class="m">${s.last?new Date(s.last).toLocaleDateString('ar-SA'):'—'}</td></tr>`).join('')||'<tr><td colspan="3" class="m">لا بيانات</td></tr>'}</tbody></table></div>
+      <div><b style="color:#23305a">حسب التصنيف</b><table style="margin-top:8px"><thead><tr><th>التصنيف</th><th>عدد</th></tr></thead><tbody>${h.byCategory.map(c=>`<tr><td>${esc(c.category||'—')}</td><td class="num">${fmt(c.count)}</td></tr>`).join('')}</tbody></table></div>
+    </div>
+    <div class="m" style="margin-top:16px;font-size:12.5px">آخر سحب: <b>${esc(when)}</b>${h.lastCrawl?` — بيوت ${fmt(h.lastCrawl.bayut||0)} · عقار ${fmt(h.lastCrawl.aqar||0)}`:''}</div>
+    <style>.metrics .mt{background:#fff;border:1px solid #e2ebec;border-top:2px solid #229799;border-radius:0 0 10px 10px;padding:14px}.metrics b{display:block;font-size:24px;font-weight:800;color:#23305a}.metrics span{font-size:11.5px;color:#5b6b76}</style>`;
+  res.send(shell('صحة البيانات', body, req.user));
+}
+
+// مركز السحب (مدير) — يشغّل POST /api/requests/crawl
+export async function crawlCenterPage(req, res) {
+  const h = await dataHealth();
+  const when = h.lastCrawl?.at ? new Date(h.lastCrawl.at).toLocaleString('ar-SA') : 'لم يُسحب بعد';
+  const body = `<div class="card" style="background:#fff;border:1px solid #e2ebec;border-radius:14px;padding:20px;max-width:560px">
+      <b style="color:#23305a;font-size:16px">سحب السوق</b>
+      <p class="m" style="font-size:13px;margin:8px 0 16px">يجلب أحدث العروض من بيوت وعقار ويخزّنها للمطابقة والدراسة. آخر سحب: <b>${esc(when)}</b> · المخزون الآن <b>${fmt(h.active)}</b>.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="s_bayut" checked> بيوت</label>
+        <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="s_aqar" checked> عقار</label>
+      </div>
+      <button class="btn" id="go" style="margin-top:16px" onclick="run()">▶ ابدأ السحب</button>
+      <div id="out" class="m" style="margin-top:14px;font-size:13px"></div>
+    </div>
+    <script>
+      async function run(){
+        var b=document.getElementById('s_bayut').checked, a=document.getElementById('s_aqar').checked;
+        var sources=[]; if(b)sources.push('bayut'); if(a)sources.push('aqar');
+        if(!sources.length){document.getElementById('out').textContent='اختر مصدرًا واحدًا على الأقل.';return;}
+        var btn=document.getElementById('go'); btn.disabled=true; btn.textContent='… يسحب';
+        document.getElementById('out').textContent='جارٍ السحب، قد يستغرق دقائق…';
+        try{
+          var r=await fetch('/api/requests/crawl',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sources})});
+          var j=await r.json();
+          if(j.ok!==false){var d=j.data||j; document.getElementById('out').innerHTML='تم ✓ — بيوت '+(d.bayut||0)+' · عقار '+(d.aqar||0)+' · الإجمالي الفعّال '+(d.totalActive||0);}
+          else document.getElementById('out').textContent='فشل: '+(j.error||'غير معروف');
+        }catch(e){document.getElementById('out').textContent='خطأ اتصال: '+e.message;}
+        btn.disabled=false; btn.textContent='▶ ابدأ السحب';
+      }
+    </script>`;
+  res.send(shell('مركز السحب', body, req.user));
+}
+
+// تصدير CSV (مدير)
+export async function exportProperties(req, res) {
+  const csv = await exportPropertiesCsv({ city:req.query.city||null, category:req.query.category||null, district:req.query.district||null });
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="properties.csv"');
+  res.send(csv);
 }

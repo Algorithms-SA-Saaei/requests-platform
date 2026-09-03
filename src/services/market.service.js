@@ -140,3 +140,65 @@ export async function mapProperties(district, category, { limit = 500 } = {}) {
   const rows = await Property.find(q).select('lat lng category price pricePerM title district').limit(limit).lean();
   return rows.map((r) => ({ lat: r.lat, lng: r.lng, ppm: r.pricePerM, price: r.price, cat: r.category, t: (r.title || '').slice(0, 50), d: stripHay(r.district) }));
 }
+
+
+/** المشاريع/المجمّعات: تجميع حسب projectName مع الوسيط والنوع (جاهز/خارطة) */
+export async function projectsList({ category, saleType, city, limit = 200 } = {}) {
+  const q = { active: true, projectName: { $ne: null, $nin: ['', null] } };
+  if (category) q.category = category;
+  if (saleType) q.saleType = saleType;
+  if (city) q.city = city;
+  const rows = await Property.find(q).select('projectName category saleType district pricePerM price area city').limit(8000).lean();
+  const g = new Map();
+  for (const r of rows) {
+    const key = r.projectName;
+    if (!g.has(key)) g.set(key, { project: key, count: 0, ppms: [], districts: new Set(), cats: new Set(), ready: 0, offplan: 0, city: r.city });
+    const o = g.get(key);
+    o.count++;
+    if (Number.isFinite(r.pricePerM)) o.ppms.push(r.pricePerM);
+    if (r.district) o.districts.add(stripHay(r.district));
+    if (r.category) o.cats.add(r.category);
+    if (r.saleType === 'ready') o.ready++; else if (r.saleType === 'offplan') o.offplan++;
+  }
+  return [...g.values()]
+    .map((o) => ({ project: o.project, count: o.count, ppmMedian: median(o.ppms), districts: [...o.districts], categories: [...o.cats], ready: o.ready, offplan: o.offplan, city: o.city }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+}
+
+/** صحة البيانات: عدد كل مصدر، آخر سحب، تغطية الأحياء/التصنيفات، والنواقص */
+export async function dataHealth() {
+  const { stateGet } = await import('../models/AppState.js');
+  const [total, active, bySourceAgg, catAgg, lastCrawl, noGeo, noPrice, districtsCount] = await Promise.all([
+    Property.countDocuments({}),
+    Property.countDocuments({ active: true }),
+    Property.aggregate([{ $match: { active: true } }, { $group: { _id: '$source', count: { $sum: 1 }, last: { $max: '$syncedAt' } } }]),
+    Property.aggregate([{ $match: { active: true } }, { $group: { _id: '$category', count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
+    stateGet('last_crawl'),
+    Property.countDocuments({ active: true, $or: [{ lat: null }, { lng: null }] }),
+    Property.countDocuments({ active: true, $or: [{ price: null }, { price: 0 }] }),
+    Property.distinct('district', { active: true }),
+  ]);
+  return {
+    total, active,
+    bySource: bySourceAgg.map((s) => ({ source: s._id, count: s.count, last: s.last })).sort((a, b) => b.count - a.count),
+    byCategory: catAgg.map((c) => ({ category: c._id, count: c.count })),
+    districts: (districtsCount || []).filter(Boolean).length,
+    lastCrawl: lastCrawl || null,
+    missing: { noGeo, noPrice },
+  };
+}
+
+/** تصدير المخزون كـCSV (سطر لكل عقار) */
+export async function exportPropertiesCsv({ city, category, district } = {}) {
+  const q = { active: true };
+  if (city) q.city = city;
+  if (category) q.category = category;
+  if (district) q.district = stripHay(district);
+  const rows = await Property.find(q).select('source category district city beds area price pricePerM saleType projectName url').limit(50000).lean();
+  const head = ['المصدر', 'التصنيف', 'الحي', 'المدينة', 'الغرف', 'المساحة', 'السعر', 'سعر المتر', 'النوع', 'المشروع', 'الرابط'];
+  const esc = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [head.join(',')];
+  for (const r of rows) lines.push([r.source, r.category, stripHay(r.district), r.city, r.beds, r.area, r.price, r.pricePerM, r.saleType === 'ready' ? 'جاهز' : r.saleType === 'offplan' ? 'خارطة' : '', r.projectName, r.url].map(esc).join(','));
+  return '﻿' + lines.join('\n');
+}

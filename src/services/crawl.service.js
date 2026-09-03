@@ -1,6 +1,7 @@
 // تنسيق سحب السوق (بيوت + عقار) → مجموعة Property في Mongo (مصدر مطابقة الطلبات).
 // يُشغَّل بجدولة أو يدويًا. idempotent: upsert على (source, sourceId).
 import { logger } from '../utils/logger.js';
+import { stateSet } from '../models/AppState.js';
 import { Property } from '../models/Property.js';
 import { crawlBayut } from './crawlers/bayut.crawler.js';
 import { crawlAqar } from './crawlers/aqar.crawler.js';
@@ -33,5 +34,6 @@ export async function crawlMarket({ sources = ['bayut', 'aqar'], city = 'الر�
     logger.info('crawl-aqar-done', { fetched: rows.length, stored: summary.aqar });
   }
   const total = await Property.countDocuments({ active: true });
+  await stateSet('last_crawl', { at: new Date().toISOString(), sources, ...summary });
   return { ...summary, totalActive: total };
 }
