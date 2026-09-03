@@ -112,3 +112,31 @@ export async function saleSplit(district, category) {
     offplanVsReadyPct: diff,
   };
 }
+
+const km = (la1, lo1, la2, lo2) => {
+  const R = 6371, dLa = (la2 - la1) * Math.PI / 180, dLo = (lo2 - lo1) * Math.PI / 180;
+  const a = Math.sin(dLa / 2) ** 2 + Math.cos(la1 * Math.PI / 180) * Math.cos(la2 * Math.PI / 180) * Math.sin(dLo / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+// وحدات قرب موقع (نطاق كم) — تصفية بالتصنيف
+export async function nearbyProperties(lat, lng, { radius = 3, category, limit = 60 } = {}) {
+  const la = +lat, lo = +lng;
+  if (!Number.isFinite(la) || !Number.isFinite(lo)) return { center: null, results: [] };
+  const d = radius / 111;
+  const q = { active: true, lat: { $gte: la - d, $lte: la + d }, lng: { $gte: lo - d * 1.3, $lte: lo + d * 1.3 } };
+  if (category) q.category = category;
+  const rows = await Property.find(q).select('lat lng category district beds area price pricePerM url title').limit(2000).lean();
+  return {
+    center: { lat: la, lng: lo }, radius,
+    results: rows.map((r) => ({ ...r, dist: Math.round(km(la, lo, r.lat, r.lng) * 10) / 10 }))
+      .filter((r) => r.dist <= radius).sort((a, b) => a.dist - b.dist).slice(0, limit),
+  };
+}
+// عقارات حي (بإحداثيات) للخريطة
+export async function mapProperties(district, category, { limit = 500 } = {}) {
+  const q = { active: true, lat: { $ne: null }, lng: { $ne: null } };
+  if (district) q.district = stripHay(district);
+  if (category) q.category = category;
+  const rows = await Property.find(q).select('lat lng category price pricePerM title district').limit(limit).lean();
+  return rows.map((r) => ({ lat: r.lat, lng: r.lng, ppm: r.pricePerM, price: r.price, cat: r.category, t: (r.title || '').slice(0, 50), d: stripHay(r.district) }));
+}

@@ -6,6 +6,7 @@ import { matchesForRequest } from '../services/matching.service.js';
 import { tokenStatus } from '../services/saaeiToken.service.js';
 import { marketReport, districtsWithData, compareDistricts, priceUnit, saleSplit } from '../services/market.service.js';
 import { demandGaps } from '../services/demand.service.js';
+import { nearbyProperties, mapProperties, marketOverview } from '../services/market.service.js';
 import { User, verifyPassword } from '../models/User.js';
 import { signToken } from '../middleware/auth.middleware.js';
 import { env } from '../config/environment.js';
@@ -49,9 +50,9 @@ const CSS = `
   .err{background:#fbeef0;color:#b23a48;border:1px solid #f0c9cf;border-radius:9px;padding:9px 12px;font-size:13px;margin-bottom:14px}
 `;
 
-const shell = (title, body, user) => `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} — طلبات ساعي</title><style>${CSS}</style></head><body>
-<header><div class="b"><img src="https://saaei.co/assets/img/main_logo.svg" alt="ساعي" onerror="this.style.display='none'"><h1>طلبات ساعي</h1></div><nav style="display:flex;gap:14px;font-size:13.5px"><a href="/">الطلبات</a><a href="/market">دراسة السوق</a><a href="/compare">مقارنة</a><a href="/pricing">تسعير</a><a href="/sale-split">جاهز/خارطة</a><a href="/demands">فجوات</a></nav>
+const shell = (title, body, user, extraHead = '') => `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} — طلبات ساعي</title>${extraHead}<style>${CSS}</style></head><body>
+<header><div class="b"><img src="https://saaei.co/assets/img/main_logo.svg" alt="ساعي" onerror="this.style.display='none'"><h1>طلبات ساعي</h1></div><nav style="display:flex;gap:14px;font-size:13.5px"><a href="/">الطلبات</a><a href="/market">دراسة السوق</a><a href="/compare">مقارنة</a><a href="/pricing">تسعير</a><a href="/sale-split">جاهز/خارطة</a><a href="/demands">فجوات</a><a href="/map">الخريطة</a><a href="/nearby">قرب موقع</a><a href="/analytics">تحليلات</a></nav>
 ${user ? `<div><span class="u">${esc(user.name || '')}</span> · <a class="out" href="/logout">خروج</a></div>` : ''}</header>
 <div class="wrap">${body}</div></body></html>`;
 
@@ -244,4 +245,61 @@ export async function saleSplitPage(req, res) {
   const dopts = dists.map((x)=>`<option value="${esc(String(x.district).replace(/^حي\s+/,''))}" ${String(x.district).replace(/^حي\s+/,'')===district?'selected':''}>${esc(String(x.district).replace(/^حي\s+/,''))}</option>`).join('');
   const out = r ? `<div class="metrics"><div class="mt"><b>${fmt(r.ready.ppmMedian)}</b><span>جاهز — وسيط ر/م² (${r.ready.count})</span></div><div class="mt"><b>${fmt(r.offplan.ppmMedian)}</b><span>خارطة — وسيط ر/م² (${r.offplan.count})</span></div><div class="mt"><b>${r.offplanVsReadyPct==null?'—':(r.offplanVsReadyPct>0?'+':'')+r.offplanVsReadyPct+'%'}</b><span>فرق الخارطة عن الجاهز</span></div></div><style>.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.metrics .mt{background:#fff;border:1px solid #e2ebec;border-top:2px solid #229799;border-radius:0 0 10px 10px;padding:14px}.metrics b{display:block;font-size:24px;font-weight:800;color:#23305a}.metrics span{font-size:11.5px;color:#5b6b76}</style>${r.unknown.count?`<div class="m" style="margin-top:10px;font-size:12px">${r.unknown.count} وحدة بلا حالة بيع محدّدة (تظهر بعد إعادة السحب).</div>`:''}` : '<div class="m">اختر الحي.</div>';
   res.send(shell('جاهز / خارطة', `<form method="GET" action="/sale-split" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"><select name="category" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit">${catSel(cat)}</select><select name="district" onchange="this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit;min-width:180px"><option value="">— اختر الحي —</option>${dopts}</select><button class="btn">عرض</button></form>${out}`, req.user));
+}
+
+const LEAFLET = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
+const ppmColor = 'function(p){return p==null?"#6b7a84":p<3000?"#1a9850":p<6000?"#91cf60":p<9000?"#d6a313":p<13000?"#e07b39":"#d73027";}';
+
+// الخريطة
+export async function mapPage(req, res) {
+  const cat = ['شقة','دور','فيلا','تاون هاوس','أرض'].includes(req.query.category)?req.query.category:'شقة';
+  const district = req.query.district||'';
+  const dists = await districtsWithData(cat);
+  const pts = await mapProperties(district||null, cat);
+  const dopts = dists.map((x)=>`<option value="${esc(String(x.district).replace(/^حي\s+/,''))}" ${String(x.district).replace(/^حي\s+/,'')===district?'selected':''}>${esc(String(x.district).replace(/^حي\s+/,''))} (${x.count})</option>`).join('');
+  const body = `<form method="GET" action="/map" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"><select name="category" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit">${['شقة','دور','فيلا','تاون هاوس','أرض'].map(x=>`<option ${x===cat?'selected':''}>${x}</option>`).join('')}</select><select name="district" onchange="this.form.submit()" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit;min-width:180px"><option value="">— كل الأحياء —</option>${dopts}</select><button class="btn">عرض</button></form>
+    <div class="m" style="font-size:12px;margin-bottom:8px">${pts.length} عقار على الخريطة · اللون حسب سعر المتر (أخضر أرخص، أحمر أغلى)</div>
+    <div id="map" style="height:520px;border-radius:14px;border:1px solid #e2ebec;overflow:hidden"></div>
+    <script>var PTS=${JSON.stringify(pts)};var col=${ppmColor};
+      var map=L.map('map',{scrollWheelZoom:false}).setView([24.71,46.67],11);map.on('focus',function(){map.scrollWheelZoom.enable()});map.on('blur',function(){map.scrollWheelZoom.disable()});
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:20,subdomains:'abcd'}).addTo(map);
+      var b=[];PTS.forEach(function(p){if(p.lat&&p.lng){L.circleMarker([p.lat,p.lng],{radius:5,color:'#fff',weight:1,fillColor:col(p.ppm),fillOpacity:.85}).bindPopup((p.t||'')+'<br>'+(p.cat||'')+' · '+(p.ppm?Number(p.ppm).toLocaleString('en-US')+' ر/م²':'')+'<br>'+(p.d||'')).addTo(map);b.push([p.lat,p.lng]);}});
+      if(b.length)try{map.fitBounds(b,{padding:[30,30],maxZoom:14});}catch(e){}
+    </script>`;
+  res.send(shell('الخريطة', body, req.user, LEAFLET));
+}
+
+// وحدات قرب موقع
+export async function nearbyPage(req, res) {
+  const cat = req.query.category && ['شقة','دور','فيلا','تاون هاوس','أرض'].includes(req.query.category)?req.query.category:'';
+  const lat=req.query.lat, lng=req.query.lng, radius=+req.query.radius||3;
+  const data = (lat&&lng)?await nearbyProperties(lat,lng,{radius,category:cat||null}):null;
+  const list = data ? data.results.map(u=>`<tr><td>${esc(u.category||'')}</td><td>${esc(u.district||'')}</td><td class="num">${fmt(u.area)}م²</td><td class="num">${fmt(u.price)}</td><td class="num" style="color:#229799;font-weight:800">${fmt(u.pricePerM)}</td><td class="num m">${u.dist}كم</td><td>${u.url?`<a href="${esc(u.url)}" target="_blank">↗</a>`:''}</td></tr>`).join('') : '';
+  const body = `<form method="GET" action="/nearby" id="nf" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
+      <select name="category" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;font-family:inherit"><option value="">كل الأنواع</option>${['شقة','دور','فيلا','تاون هاوس','أرض'].map(x=>`<option ${x===cat?'selected':''}>${x}</option>`).join('')}</select>
+      <input name="lat" id="lat" placeholder="خط العرض" value="${esc(lat||'')}" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;width:130px">
+      <input name="lng" id="lng" placeholder="خط الطول" value="${esc(lng||'')}" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2;width:130px">
+      <select name="radius" style="padding:12px;border-radius:11px;border:1px solid #d3e0e2"><option value="1" ${radius===1?'selected':''}>1كم</option><option value="3" ${radius===3?'selected':''}>3كم</option><option value="5" ${radius===5?'selected':''}>5كم</option></select>
+      <button type="button" class="btn" style="background:#6b7a84" onclick="navigator.geolocation.getCurrentPosition(function(p){document.getElementById('lat').value=p.coords.latitude.toFixed(6);document.getElementById('lng').value=p.coords.longitude.toFixed(6);document.getElementById('nf').submit();})">📍 موقعي</button>
+      <button class="btn">بحث</button></form>
+    ${data?`<div class="m" style="font-size:12px;margin-bottom:8px">${data.results.length} وحدة ضمن ${radius}كم</div><table><thead><tr><th>النوع</th><th>الحي</th><th>المساحة</th><th>السعر</th><th>ر/م²</th><th>المسافة</th><th></th></tr></thead><tbody>${list||'<tr><td colspan="7" class="m" style="text-align:center;padding:20px">لا وحدات قريبة.</td></tr>'}</tbody></table>`:'<div class="m">أدخل إحداثيات أو اضغط «موقعي».</div>'}`;
+  res.send(shell('وحدات قرب موقع', body, req.user));
+}
+
+// التحليلات
+export async function analyticsPage(req, res) {
+  const [ov, top] = await Promise.all([marketOverview(), compareDistricts('شقة', { limit: 12 })]);
+  const maxCat = Math.max(1, ...ov.byCategory.map(c=>c.ppmMedian||0));
+  const maxD = Math.max(1, ...top.map(d=>d.ppmMedian||0));
+  const bar=(v,mx,lab,n)=>`<div style="margin:6px 0"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(lab)} <span class="m">${n?'('+n+')':''}</span></span><b style="color:#229799">${fmt(v)}</b></div><div style="background:#eef4f5;border-radius:6px;height:12px"><div style="background:#229799;height:12px;border-radius:6px;width:${Math.round((v||0)/mx*100)}%"></div></div></div>`;
+  const body = `<div class="metrics" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
+      <div class="mt"><b>${fmt(ov.total)}</b><span>إجمالي المخزون</span></div>
+      ${ov.bySource.map(s=>`<div class="mt"><b>${fmt(s.count)}</b><span>${esc(s.source)}</span></div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div><b style="color:#23305a">وسيط سعر المتر حسب التصنيف</b>${ov.byCategory.map(c=>bar(c.ppmMedian,maxCat,c.category,c.count)).join('')}</div>
+      <div><b style="color:#23305a">أغلى الأحياء (شقق)</b>${top.map(d=>bar(d.ppmMedian,maxD,d.district,d.count)).join('')}</div>
+    </div>
+    <style>.metrics .mt{background:#fff;border:1px solid #e2ebec;border-top:2px solid #229799;border-radius:0 0 10px 10px;padding:14px}.metrics b{display:block;font-size:24px;font-weight:800;color:#23305a}.metrics span{font-size:11.5px;color:#5b6b76}</style>`;
+  res.send(shell('التحليلات', body, req.user));
 }

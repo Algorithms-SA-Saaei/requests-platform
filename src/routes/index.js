@@ -36,5 +36,7 @@ router.get('/market/compare', requireAuth, asyncHandler(market.compare));
 router.get('/market/price', requireAuth, asyncHandler(market.price));
 router.get('/market/sale-split', requireAuth, asyncHandler(market.split));
 router.get('/market/demand-gaps', requireAuth, asyncHandler(market.gaps));
+router.get('/market/nearby', requireAuth, asyncHandler(market.nearby));
+router.get('/market/map', requireAuth, asyncHandler(market.mapData));
 
 export default router;

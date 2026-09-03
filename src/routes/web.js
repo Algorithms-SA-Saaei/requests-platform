@@ -16,5 +16,8 @@ router.get('/compare', requireAuthWeb, asyncHandler(web.comparePage));
 router.get('/pricing', requireAuthWeb, asyncHandler(web.pricePage));
 router.get('/sale-split', requireAuthWeb, asyncHandler(web.saleSplitPage));
 router.get('/demands', requireAuthWeb, asyncHandler(web.demandsPage));
+router.get('/map', requireAuthWeb, asyncHandler(web.mapPage));
+router.get('/nearby', requireAuthWeb, asyncHandler(web.nearbyPage));
+router.get('/analytics', requireAuthWeb, asyncHandler(web.analyticsPage));
 router.post('/sync', requireAuthWeb, requireRole('admin', 'manager'), writeLimiter, asyncHandler(web.doSync));
 export default router;

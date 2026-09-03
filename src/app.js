@@ -25,10 +25,10 @@ export function createApp() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
-        imgSrc: ["'self'", "data:", "https://saaei.co", "https://images.bayut.sa", "https://images.aqar.fm"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https://saaei.co", "https://images.bayut.sa", "https://images.aqar.fm", "https://unpkg.com", "https://*.basemaps.cartocdn.com", "https://*.tile.openstreetmap.org"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
         formAction: ["'self'"],
       },
     },
